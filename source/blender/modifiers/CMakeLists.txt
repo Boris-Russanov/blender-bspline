@@ -99,6 +99,7 @@ set(SRC
   intern/MOD_weightvgproximity.c
   intern/MOD_weld.cc
   intern/MOD_wireframe.c
+  intern/MOD_to_bspline.c
 
   MOD_modifiertypes.h
   MOD_nodes.h

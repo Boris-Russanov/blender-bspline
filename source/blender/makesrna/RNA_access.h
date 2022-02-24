@@ -86,6 +86,7 @@ extern StructRNA RNA_Brush;
 extern StructRNA RNA_BrushCapabilitiesImagePaint;
 extern StructRNA RNA_BrushCapabilitiesVertexPaint;
 extern StructRNA RNA_BrushTextureSlot;
+extern StructRNA RNA_BsplineModifier;			//added in
 extern StructRNA RNA_BuildGpencilModifier;
 extern StructRNA RNA_BuildModifier;
 extern StructRNA RNA_ByteColorAttribute;

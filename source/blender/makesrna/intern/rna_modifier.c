@@ -114,6 +114,11 @@ const EnumPropertyItem rna_enum_object_modifier_type_items[] = {
      ICON_MOD_BOOLEAN,
      "Boolean",
      "Use another shape to cut, combine or perform a difference operation"},
+	{eModifierType_Bspline, //lol
+     "Bsplines",
+     ICON_MOD_SUBSURF,
+     "Bsplines",
+     "Subdivide surface and create manipulatable surfaces"},
     {eModifierType_Build,
      "BUILD",
      ICON_MOD_BUILD,
@@ -7169,6 +7174,30 @@ static void rna_def_modifier_volume_to_mesh(BlenderRNA *brna)
   RNA_define_lib_overridable(false);
 }
 
+
+static void rna_def_modifier_b_spline(BlenderRNA *brna)
+{
+  StructRNA *srna;
+  PropertyRNA *prop;
+
+  // Define the RNA and bind it to the BsplineaModifierData DNA struct
+  srna = RNA_def_struct(brna, "BsplineModifier", "Modifier");
+  RNA_def_struct_ui_text(srna, "Bspline Modifier", "");
+  RNA_def_struct_sdna(srna, "BsplineModifierData");
+  RNA_def_struct_ui_icon(srna, ICON_MOD_ARRAY);
+
+  // There will be such a block for each data field of BsplineModifierData
+  //prop = RNA_def_property(srna, "number", PROP_INT, PROP_NONE);
+  //RNA_def_property_range(prop, 0, 100);
+  //RNA_def_property_ui_range(prop, 0, 100, 1, -1);
+  //RNA_def_property_ui_text(prop,
+  //                         "Olives",
+  //                         "The number of olives on the pizza");
+  //RNA_def_property_update(prop, 0, "rna_Modifier_update");
+}
+
+
+
 void RNA_def_modifier(BlenderRNA *brna)
 {
   StructRNA *srna;
@@ -7319,6 +7348,7 @@ void RNA_def_modifier(BlenderRNA *brna)
   rna_def_modifier_mesh_to_volume(brna);
   rna_def_modifier_volume_displace(brna);
   rna_def_modifier_volume_to_mesh(brna);
+  rna_def_modifier_b_spline(brna);
 }
 
 #endif
