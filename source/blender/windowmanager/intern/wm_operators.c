@@ -911,7 +911,6 @@ int WM_generic_select_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
       ret_value = op->type->exec(C, op);
       OPERATOR_RETVAL_CHECK(ret_value);
-
       op->customdata = POINTER_FROM_INT((int)event->type);
       if (ret_value & OPERATOR_RUNNING_MODAL) {
         WM_event_add_modal_handler(C, op);
@@ -948,7 +947,7 @@ int WM_generic_select_modal(bContext *C, wmOperator *op, const wmEvent *event)
       return OPERATOR_FINISHED | OPERATOR_PASS_THROUGH;
     }
     /* Important not to return anything other than PASS_THROUGH here,
-     * otherwise it prevents underlying tweak detection code to work properly. */
+     * otherwise it prevents underlying drag detection code to work properly. */
     return OPERATOR_PASS_THROUGH;
   }
 
@@ -2822,7 +2821,7 @@ static int radial_control_modal(bContext *C, wmOperator *op, const wmEvent *even
   float numValue;
   /* TODO: fix hardcoded events */
 
-  bool snap = event->ctrl != 0;
+  bool snap = (event->modifier & KM_CTRL) != 0;
 
   /* Modal numinput active, try to handle numeric inputs first... */
   if (event->val == KM_PRESS && has_numInput && handleNumInput(C, &rc->num_input, event)) {
