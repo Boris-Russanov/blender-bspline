@@ -242,11 +242,12 @@ void WM_window_set_dpi(const wmWindow *win);
 
 bool WM_stereo3d_enabled(struct wmWindow *win, bool only_fullscreen_test);
 
-/* files */
+/* wm_files.c */
+
 void WM_file_autoexec_init(const char *filepath);
 bool WM_file_read(struct bContext *C, const char *filepath, struct ReportList *reports);
-void WM_autosave_init(struct wmWindowManager *wm);
-bool WM_recover_last_session(struct bContext *C, struct ReportList *reports);
+void WM_file_autosave_init(struct wmWindowManager *wm);
+bool WM_file_recover_last_session(struct bContext *C, struct ReportList *reports);
 void WM_file_tag_modified(void);
 
 /**
@@ -615,7 +616,8 @@ bool WM_operator_poll_context(struct bContext *C, struct wmOperatorType *ot, sho
 /**
  * For running operators with frozen context (modal handlers, menus).
  *
- * \param store: Store settings for re-use.
+ * \param store: Store properties for re-use when an operator has finished
+ * (unless #PROP_SKIP_SAVE is set).
  *
  * \warning do not use this within an operator to call itself! T29537.
  */
@@ -1453,6 +1455,9 @@ bool WM_cursor_test_motion_and_update(const int mval[2]) ATTR_NONNULL(1) ATTR_WA
 int WM_event_drag_threshold(const struct wmEvent *event);
 bool WM_event_drag_test(const struct wmEvent *event, const int prev_xy[2]);
 bool WM_event_drag_test_with_delta(const struct wmEvent *event, const int delta[2]);
+void WM_event_drag_start_mval(const wmEvent *event, const ARegion *region, int r_mval[2]);
+void WM_event_drag_start_mval_fl(const wmEvent *event, const ARegion *region, float r_mval[2]);
+void WM_event_drag_start_xy(const wmEvent *event, int r_xy[2]);
 
 /**
  * Event map that takes preferences into account.

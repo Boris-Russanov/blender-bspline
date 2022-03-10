@@ -1819,7 +1819,15 @@ bool initTransform(bContext *C, TransInfo *t, wmOperator *op, const wmEvent *eve
         use_accurate = true;
       }
     }
-    initMouseInput(t, &t->mouse, t->center2d, event->mval, use_accurate);
+
+    int mval[2];
+    if (t->flag & T_EVENT_DRAG_START) {
+      WM_event_drag_start_mval(event, t->region, mval);
+    }
+    else {
+      copy_v2_v2_int(mval, event->mval);
+    }
+    initMouseInput(t, &t->mouse, t->center2d, mval, use_accurate);
   }
 
   transform_mode_init(t, op, mode);
