@@ -4,7 +4,7 @@
    See 'release/text/readme.html' for the end user read-me.
 
 
-Blender
+Polyhedral Splines Modifier
 =======
 
 Blender is the free and open source 3D creation suite.

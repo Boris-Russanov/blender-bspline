@@ -2385,8 +2385,13 @@ typedef enum VolumeToMeshFlag {
 
 typedef struct BsplineModifierData {
   ModifierData modifier;
-  //add extra stuff here make sure it's in groups of eight bytes (so two ints below are good but not just 1).
-  //ex char pad_0[1];
+  //add extra stuff here make sure it's in groups of eight bytes.
+  struct Object *obj;
+  int degree;
+  short applied;
+  char _pad[2];
+  void *_pad0;
+  //always name to pad as: char _pad[#];
 } BsplineModifierData;
 
 #ifdef __cplusplus

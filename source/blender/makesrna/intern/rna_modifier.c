@@ -7186,14 +7186,18 @@ static void rna_def_modifier_b_spline(BlenderRNA *brna)
   RNA_def_struct_sdna(srna, "BsplineModifierData");
   RNA_def_struct_ui_icon(srna, ICON_MOD_ARRAY);
 
+  RNA_define_lib_overridable(true); //without prevents menu from showing (unsure if true)
+  
+  
   // There will be such a block for each data field of BsplineModifierData
-  //prop = RNA_def_property(srna, "number", PROP_INT, PROP_NONE);
-  //RNA_def_property_range(prop, 0, 100);
-  //RNA_def_property_ui_range(prop, 0, 100, 1, -1);
-  //RNA_def_property_ui_text(prop,
-  //                         "Olives",
-  //                         "The number of olives on the pizza");
-  //RNA_def_property_update(prop, 0, "rna_Modifier_update");
+  prop = RNA_def_property(srna, "degree", PROP_INT, PROP_NONE);          //name to give
+  RNA_def_property_int_sdna(prop, NULL, "degree");                          //var name in modifier data
+  RNA_def_property_ui_text(prop, "Degree", "The Degree of the Polyhedrial spline");
+  RNA_def_property_range(prop, 1, 6);
+  RNA_def_property_ui_range(prop, 1, 6, 1, -1);
+  RNA_def_property_update(prop, 0, "rna_Modifier_update");
+
+  RNA_define_lib_overridable(false);
 }
 
 

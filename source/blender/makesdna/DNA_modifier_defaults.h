@@ -67,6 +67,13 @@
     .bm_flag = 0, \
   }
 
+#define _DNA_DEFAULT_BsplineModifierData \
+  { \
+	.obj = NULL, \
+    .degree = 1, \
+	.applied = 0 \
+  }
+
 #define _DNA_DEFAULT_BuildModifierData \
   { \
     .start = 1.0f, \

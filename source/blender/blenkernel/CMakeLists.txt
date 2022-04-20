@@ -87,6 +87,7 @@ set(SRC
   intern/boids.c
   intern/bpath.c
   intern/brush.c
+  intern/bspline.c
   intern/bvhutils.cc
   intern/cachefile.c
   intern/callbacks.c
@@ -325,6 +326,7 @@ set(SRC
   BKE_boids.h
   BKE_bpath.h
   BKE_brush.h
+  BKE_bspline.h
   BKE_bvhutils.h
   BKE_cachefile.h
   BKE_callbacks.h

@@ -236,6 +236,7 @@ SDNA_DEFAULT_DECL_STRUCT(ArmatureModifierData);
 SDNA_DEFAULT_DECL_STRUCT(ArrayModifierData);
 SDNA_DEFAULT_DECL_STRUCT(BevelModifierData);
 SDNA_DEFAULT_DECL_STRUCT(BooleanModifierData);
+SDNA_DEFAULT_DECL_STRUCT(BsplineModifierData);
 SDNA_DEFAULT_DECL_STRUCT(BuildModifierData);
 SDNA_DEFAULT_DECL_STRUCT(CastModifierData);
 SDNA_DEFAULT_DECL_STRUCT(ClothSimSettings);
@@ -475,6 +476,7 @@ const void *DNA_default_table[SDNA_TYPE_MAX] = {
     SDNA_DEFAULT_DECL(ArrayModifierData),
     SDNA_DEFAULT_DECL(BevelModifierData),
     SDNA_DEFAULT_DECL(BooleanModifierData),
+	SDNA_DEFAULT_DECL(BsplineModifierData),
     SDNA_DEFAULT_DECL(BuildModifierData),
     SDNA_DEFAULT_DECL(CastModifierData),
     SDNA_DEFAULT_DECL(ClothSimSettings),
