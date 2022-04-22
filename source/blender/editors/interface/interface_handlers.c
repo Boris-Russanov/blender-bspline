@@ -59,6 +59,7 @@
 #include "interface_intern.h"
 
 #include "RNA_access.h"
+#include "RNA_prototypes.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -922,10 +923,8 @@ static void ui_apply_but_undo(uiBut *but)
     if (but->rnapoin.owner_id) {
       /* Exception for renaming ID data, we always need undo pushes in this case,
        * because undo systems track data by their ID, see: T67002. */
-      extern PropertyRNA rna_ID_name;
       /* Exception for active shape-key, since changing this in edit-mode updates
        * the shape key from object mode data. */
-      extern PropertyRNA rna_Object_active_shape_key_index;
       if (ELEM(but->rnaprop, &rna_ID_name, &rna_Object_active_shape_key_index)) {
         /* pass */
       }
@@ -1007,7 +1006,7 @@ static void ui_apply_but_funcs_after(bContext *C)
 
     if (after.optype) {
       WM_operator_name_call_ptr_with_depends_on_cursor(
-          C, after.optype, after.opcontext, (after.opptr) ? &opptr : NULL, after.drawstr);
+          C, after.optype, after.opcontext, (after.opptr) ? &opptr : NULL, NULL, after.drawstr);
     }
 
     if (after.opptr) {
@@ -3019,12 +3018,12 @@ static bool ui_textedit_set_cursor_pos_foreach_glyph(const char *UNUSED(str),
                                                      const size_t str_step_ofs,
                                                      const rcti *glyph_step_bounds,
                                                      const int UNUSED(glyph_advance_x),
-                                                     const rctf *glyph_bounds,
+                                                     const rcti *glyph_bounds,
                                                      const int UNUSED(glyph_bearing[2]),
                                                      void *user_data)
 {
   int *cursor_data = user_data;
-  const float center = glyph_step_bounds->xmin + (BLI_rctf_size_x(glyph_bounds) / 2.0f);
+  const int center = glyph_step_bounds->xmin + (BLI_rcti_size_x(glyph_bounds) / 2.0f);
   if (cursor_data[0] < center) {
     cursor_data[1] = str_step_ofs;
     return false;
@@ -4190,6 +4189,7 @@ static void ui_but_extra_operator_icon_apply(bContext *C, uiBut *but, uiButExtra
                                                    op_icon->optype_params->optype,
                                                    op_icon->optype_params->opcontext,
                                                    op_icon->optype_params->opptr,
+                                                   NULL,
                                                    NULL);
 
   /* Force recreation of extra operator icons (pseudo update). */
@@ -7969,7 +7969,16 @@ static int ui_do_button(bContext *C, uiBlock *block, uiBut *but, const wmEvent *
   }
 
   if (but->flag & UI_BUT_DISABLED) {
-    return WM_UI_HANDLER_BREAK;
+    /* It's important to continue here instead of breaking since breaking causes the event to be
+     * considered "handled", preventing further click/drag events from being generated.
+     *
+     * An example of where this is needed is dragging node-sockets, where dragging a node-socket
+     * could exit the button before the drag threshold was reached, disable the button then break
+     * handling of the #MOUSEMOVE event preventing the socket being dragged entirely, see: T96255.
+     *
+     * Region level event handling is responsible for preventing events being passed
+     * through to parts of the UI that are logically behind this button, see: T92364. */
+    return WM_UI_HANDLER_CONTINUE;
   }
 
   switch (but->type) {

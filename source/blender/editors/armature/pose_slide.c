@@ -8,20 +8,20 @@
  * ====================
  *
  * - Push & Relax, Breakdowner
-
+ *
  *   These tools provide the animator with various capabilities
  *   for interactively controlling the spacing of poses, but also
  *   for 'pushing' and/or 'relaxing' extremes as they see fit.
  *
  * - Propagate
-
+ *
  *   This tool copies elements of the selected pose to successive
  *   keyframes, allowing the animator to go back and modify the poses
  *   for some "static" pose controls, without having to repeatedly
  *   doing a "next paste" dance.
  *
  * - Pose Sculpting (TODO)
-
+ *
  *   This is yet to be implemented, but the idea here is to use
  *   sculpting techniques to make it easier to pose rigs by allowing
  *   rigs to be manipulated using a familiar paint-based interface.
@@ -53,6 +53,7 @@
 
 #include "RNA_access.h"
 #include "RNA_define.h"
+#include "RNA_prototypes.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -895,7 +896,7 @@ static void pose_slide_draw_status(bContext *C, tPoseSlideOp *pso)
       strcpy(mode_str, TIP_("Breakdown"));
       break;
     case POSESLIDE_BLEND:
-      strcpy(mode_str, TIP_("Blend To Neighbor"));
+      strcpy(mode_str, TIP_("Blend to Neighbor"));
       break;
 
     default:
@@ -1721,7 +1722,7 @@ static int pose_slide_blend_to_neighbors_exec(bContext *C, wmOperator *op)
 void POSE_OT_blend_to_neighbors(wmOperatorType *ot)
 {
   /* Identifiers. */
-  ot->name = "Blend To Neighbor";
+  ot->name = "Blend to Neighbor";
   ot->idname = "POSE_OT_blend_to_neighbor";
   ot->description = "Blend from current position to previous or next keyframe";
 

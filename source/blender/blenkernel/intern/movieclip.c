@@ -60,6 +60,7 @@
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
 #include "IMB_moviecache.h"
+#include "IMB_openexr.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
@@ -67,10 +68,6 @@
 #include "GPU_texture.h"
 
 #include "BLO_read_write.h"
-
-#ifdef WITH_OPENEXR
-#  include "intern/openexr/openexr_multi.h"
-#endif
 
 static void free_buffers(MovieClip *clip);
 
@@ -142,12 +139,10 @@ static void movie_clip_foreach_cache(ID *id,
   IDCacheKey key = {
       .id_session_uuid = id->session_uuid,
       .offset_in_ID = offsetof(MovieClip, cache),
-      .cache_v = movie_clip->cache,
   };
   function_callback(id, &key, (void **)&movie_clip->cache, 0, user_data);
 
   key.offset_in_ID = offsetof(MovieClip, tracking.camera.intrinsics);
-  key.cache_v = movie_clip->tracking.camera.intrinsics;
   function_callback(id, &key, (void **)&movie_clip->tracking.camera.intrinsics, 0, user_data);
 }
 
@@ -1609,8 +1604,10 @@ void BKE_movieclip_get_cache_segments(MovieClip *clip,
   if (clip->cache) {
     int proxy = rendersize_to_proxy(user, clip->flag);
 
+    BLI_thread_lock(LOCK_MOVIECLIP);
     IMB_moviecache_get_cache_segments(
         clip->cache->moviecache, proxy, user->render_flag, r_totseg, r_points);
+    BLI_thread_unlock(LOCK_MOVIECLIP);
   }
 }
 

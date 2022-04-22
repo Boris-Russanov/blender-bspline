@@ -999,7 +999,7 @@ static void blendfile_link_append_proxies_convert(Main *bmain, ReportList *repor
         RPT_WARNING,
         "Proxies have been removed from Blender (%d proxies were automatically converted "
         "to library overrides, %d proxies could not be converted and were cleared). "
-        "Please consider re-saving any library .blend file with the newest Blender version.",
+        "Please consider re-saving any library .blend file with the newest Blender version",
         bf_reports.count.proxies_to_lib_overrides_success,
         bf_reports.count.proxies_to_lib_overrides_failures);
   }
@@ -1186,6 +1186,11 @@ void BKE_blendfile_append(BlendfileLinkAppendContext *lapp_context, ReportList *
     }
     BLI_assert(ID_IS_LINKED(id));
     BLI_assert(id->newid != NULL);
+
+    /* Do NOT delete a linked data that was already linked before this append. */
+    if (id->tag & LIB_TAG_PRE_EXISTING) {
+      continue;
+    }
 
     id->tag |= LIB_TAG_DOIT;
     item->new_id = id->newid;

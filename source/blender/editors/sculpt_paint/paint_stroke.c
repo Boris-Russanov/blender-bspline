@@ -792,7 +792,7 @@ static int paint_space_stroke(bContext *C,
   Paint *paint = BKE_paint_get_active_from_context(C);
   ePaintMode mode = BKE_paintmode_get_active_from_context(C);
   Brush *brush = BKE_paint_brush(paint);
-  int cnt = 0;
+  int count = 0;
 
   const bool use_scene_spacing = paint_stroke_use_scene_spacing(brush, mode);
   float d_world_space_position[3] = {0.0f};
@@ -855,14 +855,14 @@ static int paint_space_stroke(bContext *C,
       pressure = stroke->last_pressure;
       dpressure = final_pressure - stroke->last_pressure;
 
-      cnt++;
+      count++;
     }
     else {
       break;
     }
   }
 
-  return cnt;
+  return count;
 }
 
 /**** Public API ****/
@@ -986,6 +986,11 @@ static void stroke_done(bContext *C, wmOperator *op, PaintStroke *stroke)
   paint_stroke_free(C, op, stroke);
 }
 
+static bool curves_sculpt_brush_uses_spacing(const eBrushCurvesSculptTool tool)
+{
+  return ELEM(tool, CURVES_SCULPT_TOOL_ADD);
+}
+
 bool paint_space_stroke_enabled(Brush *br, ePaintMode mode)
 {
   if ((br->flag & BRUSH_SPACE) == 0) {
@@ -1000,7 +1005,8 @@ bool paint_space_stroke_enabled(Brush *br, ePaintMode mode)
     return true;
   }
 
-  if (mode == PAINT_MODE_SCULPT_CURVES) {
+  if (mode == PAINT_MODE_SCULPT_CURVES &&
+      !curves_sculpt_brush_uses_spacing(br->curves_sculpt_tool)) {
     return false;
   }
 
@@ -1383,10 +1389,11 @@ static void paint_stroke_line_constrain(PaintStroke *stroke, float mouse[2])
   }
 }
 
-int paint_stroke_modal(bContext *C, wmOperator *op, const wmEvent *event, PaintStroke *stroke)
+int paint_stroke_modal(bContext *C, wmOperator *op, const wmEvent *event, PaintStroke **stroke_p)
 {
   Paint *p = BKE_paint_get_active_from_context(C);
   ePaintMode mode = BKE_paintmode_get_active_from_context(C);
+  PaintStroke *stroke = *stroke_p;
   Brush *br = stroke->brush = BKE_paint_brush(p);
   PaintSample sample_average;
   float mouse[2];
@@ -1435,6 +1442,7 @@ int paint_stroke_modal(bContext *C, wmOperator *op, const wmEvent *event, PaintS
   /* one time initialization */
   if (!stroke->stroke_init) {
     if (paint_stroke_curve_end(C, op, stroke)) {
+      *stroke_p = NULL;
       return OPERATOR_FINISHED;
     }
 
@@ -1491,12 +1499,14 @@ int paint_stroke_modal(bContext *C, wmOperator *op, const wmEvent *event, PaintS
       paint_stroke_line_constrain(stroke, mouse);
       paint_stroke_line_end(C, op, stroke, mouse);
       stroke_done(C, op, stroke);
+      *stroke_p = NULL;
       return OPERATOR_FINISHED;
     }
   }
   else if (ELEM(event->type, EVT_RETKEY, EVT_SPACEKEY)) {
     paint_stroke_line_end(C, op, stroke, sample_average.mouse);
     stroke_done(C, op, stroke);
+    *stroke_p = NULL;
     return OPERATOR_FINISHED;
   }
   else if (br->flag & BRUSH_LINE) {

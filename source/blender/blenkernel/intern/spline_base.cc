@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include "BLI_array.hh"
+#include "BLI_generic_virtual_array.hh"
 #include "BLI_span.hh"
 #include "BLI_task.hh"
 #include "BLI_timeit.hh"
@@ -9,19 +10,17 @@
 #include "BKE_attribute_math.hh"
 #include "BKE_spline.hh"
 
-#include "FN_generic_virtual_array.hh"
-
 using blender::Array;
 using blender::float3;
+using blender::GMutableSpan;
+using blender::GSpan;
+using blender::GVArray;
 using blender::IndexRange;
 using blender::MutableSpan;
 using blender::Span;
 using blender::VArray;
 using blender::attribute_math::convert_to_static_type;
 using blender::bke::AttributeIDRef;
-using blender::fn::GMutableSpan;
-using blender::fn::GSpan;
-using blender::fn::GVArray;
 
 CurveType Spline::type() const
 {
@@ -100,7 +99,7 @@ void Spline::reverse()
 
   this->attributes.foreach_attribute(
       [&](const AttributeIDRef &id, const AttributeMetaData &meta_data) {
-        std::optional<blender::fn::GMutableSpan> attribute = this->attributes.get_for_write(id);
+        std::optional<blender::GMutableSpan> attribute = this->attributes.get_for_write(id);
         if (!attribute) {
           BLI_assert_unreachable();
           return false;
@@ -378,17 +377,12 @@ Span<float3> Spline::evaluated_normals() const
 
   /* Only Z up normals are supported at the moment. */
   switch (this->normal_mode) {
-    case ZUp: {
+    case NORMAL_MODE_Z_UP: {
       calculate_normals_z_up(tangents, normals);
       break;
     }
-    case Minimum: {
+    case NORMAL_MODE_MINIMUM_TWIST: {
       calculate_normals_minimum(tangents, is_cyclic_, normals);
-      break;
-    }
-    case Tangent: {
-      /* Tangent mode is not yet supported. */
-      calculate_normals_z_up(tangents, normals);
       break;
     }
   }

@@ -64,7 +64,7 @@ struct StampData *BKE_stamp_info_from_scene_static(const struct Scene *scene);
  * Check whether the given metadata field name translates to a known field of a stamp.
  */
 bool BKE_stamp_is_known_field(const char *field_name);
-void BKE_imbuf_stamp_info(struct RenderResult *rr, struct ImBuf *ibuf);
+void BKE_imbuf_stamp_info(const struct RenderResult *rr, struct ImBuf *ibuf);
 void BKE_stamp_info_from_imbuf(struct RenderResult *rr, struct ImBuf *ibuf);
 void BKE_stamp_info_callback(void *data,
                              struct StampData *stamp_data,
@@ -82,15 +82,14 @@ void BKE_image_stamp_buf(struct Scene *scene,
                          int height,
                          int channels);
 bool BKE_imbuf_alpha_test(struct ImBuf *ibuf);
-int BKE_imbuf_write_stamp(struct Scene *scene,
-                          struct RenderResult *rr,
+int BKE_imbuf_write_stamp(const struct Scene *scene,
+                          const struct RenderResult *rr,
                           struct ImBuf *ibuf,
                           const char *name,
                           const struct ImageFormatData *imf);
 /**
  * \note imf->planes is ignored here, its assumed the image channels are already set.
  */
-void BKE_imbuf_write_prepare(struct ImBuf *ibuf, const struct ImageFormatData *imf);
 int BKE_imbuf_write(struct ImBuf *ibuf, const char *name, const struct ImageFormatData *imf);
 /**
  * Same as #BKE_imbuf_write() but crappy workaround not to permanently modify _some_,
@@ -100,43 +99,6 @@ int BKE_imbuf_write_as(struct ImBuf *ibuf,
                        const char *name,
                        struct ImageFormatData *imf,
                        bool save_copy);
-void BKE_image_path_from_imformat(char *string,
-                                  const char *base,
-                                  const char *relbase,
-                                  int frame,
-                                  const struct ImageFormatData *im_format,
-                                  bool use_ext,
-                                  bool use_frames,
-                                  const char *suffix);
-void BKE_image_path_from_imtype(char *string,
-                                const char *base,
-                                const char *relbase,
-                                int frame,
-                                char imtype,
-                                bool use_ext,
-                                bool use_frames,
-                                const char *suffix);
-int BKE_image_path_ensure_ext_from_imformat(char *string, const struct ImageFormatData *im_format);
-int BKE_image_path_ensure_ext_from_imtype(char *string, char imtype);
-char BKE_image_ftype_to_imtype(int ftype, const struct ImbFormatOptions *options);
-int BKE_image_imtype_to_ftype(char imtype, struct ImbFormatOptions *r_options);
-
-bool BKE_imtype_is_movie(char imtype);
-bool BKE_imtype_supports_zbuf(char imtype);
-bool BKE_imtype_supports_compress(char imtype);
-bool BKE_imtype_supports_quality(char imtype);
-bool BKE_imtype_requires_linear_float(char imtype);
-char BKE_imtype_valid_channels(char imtype, bool write_file);
-char BKE_imtype_valid_depths(char imtype);
-
-/**
- * String is from command line `--render-format` argument,
- * keep in sync with `creator_args.c` help info.
- */
-char BKE_imtype_from_arg(const char *arg);
-
-void BKE_imformat_defaults(struct ImageFormatData *im_format);
-void BKE_imbuf_to_image_format(struct ImageFormatData *im_format, const struct ImBuf *imbuf);
 
 /**
  * Used by sequencer too.
@@ -170,10 +132,6 @@ struct RenderResult;
 /* image-user gets a new image, check settings */
 #define IMA_SIGNAL_USER_NEW_IMAGE 6
 #define IMA_SIGNAL_COLORMANAGE 7
-
-#define IMA_CHAN_FLAG_BW 1
-#define IMA_CHAN_FLAG_RGB 2
-#define IMA_CHAN_FLAG_ALPHA 4
 
 /**
  * Checks whether there's an image buffer for given image and user.
@@ -371,7 +329,7 @@ void BKE_image_merge(struct Main *bmain, struct Image *dest, struct Image *sourc
 bool BKE_image_scale(struct Image *image, int width, int height);
 
 /**
- * Check if texture has alpha (planes == 32 || planes == 16).
+ * Check if texture has alpha `planes == 32 || planes == 16`.
  */
 bool BKE_image_has_alpha(struct Image *image);
 
@@ -392,13 +350,13 @@ void BKE_image_get_tile_label(struct Image *ima,
  * Checks whether the given filepath refers to a UDIM tiled texture.
  * If yes, the range from the lowest to the highest tile is returned.
  *
- * `filepath` may be modified to ensure a UDIM token is present.
- * `tiles` may be filled even if the result ultimately is false!
+ * \param filepath: may be modified to ensure a UDIM token is present.
+ * \param tiles: may be filled even if the result ultimately is false!
  */
 bool BKE_image_get_tile_info(char *filepath,
                              struct ListBase *tiles,
-                             int *tile_start,
-                             int *tile_range);
+                             int *r_tile_start,
+                             int *r_tile_range);
 
 struct ImageTile *BKE_image_add_tile(struct Image *ima, int tile_number, const char *label);
 bool BKE_image_remove_tile(struct Image *ima, struct ImageTile *tile);
@@ -427,7 +385,7 @@ typedef enum {
 void BKE_image_ensure_tile_token(char *filename);
 
 /**
- * When provided with an absolute virtual filepath, check to see if at least
+ * When provided with an absolute virtual `filepath`, check to see if at least
  * one concrete file exists.
  * Note: This function requires directory traversal and may be inefficient in time-critical,
  * or iterative, code paths.
@@ -436,8 +394,8 @@ bool BKE_image_tile_filepath_exists(const char *filepath);
 
 /**
  * Retrieves the UDIM token format and returns the pattern from the provided `filepath`.
- * The returned pattern is typically passed to either `BKE_image_get_tile_number_from_filepath` or
- * `BKE_image_set_filepath_from_tile_number`.
+ * The returned pattern is typically passed to either #BKE_image_get_tile_number_from_filepath or
+ * #BKE_image_set_filepath_from_tile_number.
  */
 char *BKE_image_get_tile_strformat(const char *filepath, eUDIM_TILE_FORMAT *r_tile_format);
 bool BKE_image_get_tile_number_from_filepath(const char *filepath,

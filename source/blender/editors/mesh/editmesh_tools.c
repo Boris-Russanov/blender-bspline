@@ -27,6 +27,7 @@
 #include "BLI_sort_utils.h"
 #include "BLI_string.h"
 
+#include "BKE_attribute.h"
 #include "BKE_context.h"
 #include "BKE_customdata.h"
 #include "BKE_deform.h"
@@ -37,6 +38,7 @@
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
+#include "BKE_object.h"
 #include "BKE_report.h"
 #include "BKE_texture.h"
 
@@ -48,6 +50,7 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
+#include "RNA_prototypes.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -56,6 +59,7 @@
 #include "ED_object.h"
 #include "ED_outliner.h"
 #include "ED_screen.h"
+#include "ED_select_utils.h"
 #include "ED_transform.h"
 #include "ED_uvedit.h"
 #include "ED_view3d.h"
@@ -724,7 +728,7 @@ void MESH_OT_edge_collapse(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Collapse Edges & Faces";
   ot->description =
-      "Collapse isolated edge and face regions, merging data such as UV's and vertex colors. "
+      "Collapse isolated edge and face regions, merging data such as UV's and color attributes. "
       "This can collapse edge-rings as well as regions of connected faces into vertices";
   ot->idname = "MESH_OT_edge_collapse";
 
@@ -2012,6 +2016,7 @@ static int edbm_duplicate_exec(bContext *C, wmOperator *op)
   uint objects_len = 0;
   Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(
       view_layer, CTX_wm_view3d(C), &objects_len);
+  bool changed = false;
 
   for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
     Object *obedit = objects[ob_index];
@@ -2022,6 +2027,7 @@ static int edbm_duplicate_exec(bContext *C, wmOperator *op)
 
     BMOperator bmop;
     BMesh *bm = em->bm;
+    changed = true;
 
     EDBM_op_init(em,
                  &bmop,
@@ -2056,16 +2062,16 @@ static int edbm_duplicate_exec(bContext *C, wmOperator *op)
   }
   MEM_freeN(objects);
 
-  return OPERATOR_FINISHED;
+  return (changed) ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
 }
 
 static int edbm_duplicate_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
   WM_cursor_wait(true);
-  edbm_duplicate_exec(C, op);
+  const int retval = edbm_duplicate_exec(C, op);
   WM_cursor_wait(false);
 
-  return OPERATOR_FINISHED;
+  return retval;
 }
 
 void MESH_OT_duplicate(wmOperatorType *ot)
@@ -2300,7 +2306,7 @@ static int edbm_edge_rotate_selected_exec(bContext *C, wmOperator *op)
   BMIter iter;
   const bool use_ccw = RNA_boolean_get(op->ptr, "use_ccw");
 
-  int tot_rotate_all = 0, tot_failed_all = 0;
+  int tot_failed_all = 0;
   bool no_selected_edges = true, invalid_selected_edges = true;
 
   ViewLayer *view_layer = CTX_data_view_layer(C);
@@ -2358,7 +2364,6 @@ static int edbm_edge_rotate_selected_exec(bContext *C, wmOperator *op)
     const int tot_rotate = BMO_slot_buffer_len(bmop.slots_out, "edges.out");
     const int tot_failed = tot - tot_rotate;
 
-    tot_rotate_all += tot_rotate;
     tot_failed_all += tot_failed;
 
     if (tot_failed != 0) {
@@ -3087,7 +3092,22 @@ static int edbm_rotate_colors_exec(bContext *C, wmOperator *op)
 
     BMOperator bmop;
 
-    EDBM_op_init(em, &bmop, op, "rotate_colors faces=%hf use_ccw=%b", BM_ELEM_SELECT, use_ccw);
+    Mesh *me = BKE_object_get_original_mesh(ob);
+    CustomDataLayer *layer = BKE_id_attributes_active_color_get(&me->id);
+
+    if (!layer || BKE_id_attribute_domain(&me->id, layer) != ATTR_DOMAIN_CORNER) {
+      continue;
+    }
+
+    int color_index = BKE_id_attribute_to_index(
+        &me->id, layer, ATTR_DOMAIN_MASK_COLOR, CD_MASK_COLOR_ALL);
+    EDBM_op_init(em,
+                 &bmop,
+                 op,
+                 "rotate_colors faces=%hf use_ccw=%b color_index=%i",
+                 BM_ELEM_SELECT,
+                 use_ccw,
+                 color_index);
 
     BMO_op_exec(em->bm, &bmop);
 
@@ -3124,9 +3144,19 @@ static int edbm_reverse_colors_exec(bContext *C, wmOperator *op)
       continue;
     }
 
+    Mesh *me = BKE_object_get_original_mesh(obedit);
+    CustomDataLayer *layer = BKE_id_attributes_active_color_get(&me->id);
+
+    if (!layer || BKE_id_attribute_domain(&me->id, layer) != ATTR_DOMAIN_CORNER) {
+      continue;
+    }
+
     BMOperator bmop;
 
-    EDBM_op_init(em, &bmop, op, "reverse_colors faces=%hf", BM_ELEM_SELECT);
+    int color_index = BKE_id_attribute_to_index(
+        &me->id, layer, ATTR_DOMAIN_MASK_COLOR, CD_MASK_COLOR_ALL);
+    EDBM_op_init(
+        em, &bmop, op, "reverse_colors faces=%hf color_index=%i", BM_ELEM_SELECT, color_index);
 
     BMO_op_exec(em->bm, &bmop);
 
@@ -3187,7 +3217,7 @@ void MESH_OT_colors_rotate(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Rotate Colors";
   ot->idname = "MESH_OT_colors_rotate";
-  ot->description = "Rotate vertex colors inside faces";
+  ot->description = "Rotate color attributes inside faces";
 
   /* api callbacks */
   ot->exec = edbm_rotate_colors_exec;
@@ -4711,7 +4741,7 @@ static int edbm_separate_exec(bContext *C, wmOperator *op)
       Object *ob = base_iter->object;
       if (ob->type == OB_MESH) {
         Mesh *me = ob->data;
-        if (!ID_IS_LINKED(me)) {
+        if (BKE_id_is_editable(bmain, &me->id)) {
           BMesh *bm_old = NULL;
           bool changed = false;
 
@@ -8539,7 +8569,10 @@ static int edbm_point_normals_modal(bContext *C, wmOperator *op, const wmEvent *
       case EDBM_CLNOR_MODAL_POINTTO_SET_USE_SELECTED:
         new_mode = EDBM_CLNOR_POINTTO_MODE_COORDINATES;
         view3d_operator_needs_opengl(C);
-        if (EDBM_select_pick(C, event->mval, false, false, false)) {
+        const struct SelectPick_Params params = {
+            .sel_op = SEL_OP_SET,
+        };
+        if (EDBM_select_pick(C, event->mval, &params)) {
           /* Point to newly selected active. */
           ED_object_calc_active_center_for_editmode(obedit, false, target);
 

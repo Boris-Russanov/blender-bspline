@@ -61,7 +61,7 @@ static void get_uvs(const CDStreamConfig &config,
   MLoop *mloop = config.mloop;
 
   if (!config.pack_uvs) {
-    int cnt = 0;
+    int count = 0;
     uvidx.resize(config.totloop);
     uvs.resize(config.totloop);
 
@@ -70,12 +70,12 @@ static void get_uvs(const CDStreamConfig &config,
       MPoly &current_poly = polygons[i];
       MLoopUV *loopuv = mloopuv_array + current_poly.loopstart + current_poly.totloop;
 
-      for (int j = 0; j < current_poly.totloop; j++, cnt++) {
+      for (int j = 0; j < current_poly.totloop; j++, count++) {
         loopuv--;
 
-        uvidx[cnt] = cnt;
-        uvs[cnt][0] = loopuv->uv[0];
-        uvs[cnt][1] = loopuv->uv[1];
+        uvidx[count] = count;
+        uvs[count][0] = loopuv->uv[0];
+        uvs[count][1] = loopuv->uv[1];
       }
     }
   }
@@ -294,7 +294,7 @@ void write_custom_data(const OCompoundProperty &prop,
 
       write_uv(prop, config, cd_data, name);
     }
-    else if (cd_data_type == CD_MLOOPCOL) {
+    else if (cd_data_type == CD_PROP_BYTE_COLOR) {
       write_mcol(prop, config, cd_data, name);
     }
   }
@@ -412,7 +412,7 @@ static void read_custom_data_mcols(const std::string &iobject_full_name,
 
   /* Read the vertex colors */
   void *cd_data = config.add_customdata_cb(
-      config.mesh, prop_header.getName().c_str(), CD_MLOOPCOL);
+      config.mesh, prop_header.getName().c_str(), CD_PROP_BYTE_COLOR);
   MCol *cfaces = static_cast<MCol *>(cd_data);
   MPoly *mpolys = config.mpoly;
   MLoop *mloops = config.mloop;

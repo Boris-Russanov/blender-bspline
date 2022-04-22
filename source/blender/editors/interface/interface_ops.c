@@ -40,6 +40,7 @@
 
 #include "RNA_access.h"
 #include "RNA_define.h"
+#include "RNA_prototypes.h"
 #include "RNA_types.h"
 
 #include "UI_interface.h"
@@ -1673,7 +1674,7 @@ static int edittranslation_exec(bContext *C, wmOperator *op)
   RNA_string_set(&ptr, "rna_prop", rna_prop.strinfo);
   RNA_string_set(&ptr, "rna_enum", rna_enum.strinfo);
   RNA_string_set(&ptr, "rna_ctxt", rna_ctxt.strinfo);
-  const int ret = WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &ptr);
+  const int ret = WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &ptr, NULL);
 
   /* Clean up */
   if (but_label.strinfo) {
@@ -1975,6 +1976,9 @@ static void UI_OT_drop_name(wmOperatorType *ot)
 static bool ui_list_focused_poll(bContext *C)
 {
   const ARegion *region = CTX_wm_region(C);
+  if (!region) {
+    return false;
+  }
   const wmWindow *win = CTX_wm_window(C);
   const uiList *list = UI_list_find_mouse_over(region, win->eventstate);
 

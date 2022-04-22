@@ -13,6 +13,7 @@
 #include "DNA_movieclip_types.h"
 #include "DNA_scene_types.h"
 #include "RNA_access.h"
+#include "RNA_prototypes.h"
 
 #include "BLI_ghash.h"
 #include "BLI_listbase.h"
@@ -197,7 +198,7 @@ static void use_values_from_fcurves(StabContext *ctx, bool toggle)
 }
 
 /* Prepare per call private working area.
- * Used for access to possibly animated values: retrieve available F-curves.
+ * Used for access to possibly animated values: retrieve available F-Curves.
  */
 static StabContext *init_stabilization_working_context(MovieClip *clip)
 {

@@ -197,7 +197,12 @@ static void toolsystem_ref_link(bContext *C, WorkSpace *workspace, bToolRef *tre
               }
               else {
                 brush = BKE_brush_add(bmain, items[i].name, paint->runtime.ob_mode);
+
                 BKE_brush_tool_set(brush, paint, slot_index);
+
+                if (paint_mode == PAINT_MODE_SCULPT) {
+                  BKE_brush_sculpt_reset(brush);
+                }
               }
               BKE_paint_brush_set(paint, brush);
             }
@@ -546,7 +551,7 @@ void WM_toolsystem_refresh_screen_area(WorkSpace *workspace, ViewLayer *view_lay
 void WM_toolsystem_refresh_screen_window(wmWindow *win)
 {
   WorkSpace *workspace = WM_window_get_active_workspace(win);
-  bool space_type_has_tools[SPACE_TYPE_LAST + 1] = {0};
+  bool space_type_has_tools[SPACE_TYPE_NUM] = {0};
   LISTBASE_FOREACH (bToolRef *, tref, &workspace->tools) {
     space_type_has_tools[tref->space_type] = true;
   }
@@ -611,7 +616,7 @@ bToolRef *WM_toolsystem_ref_set_by_id_ex(
   RNA_enum_set(&op_props, "space_type", tkey->space_type);
   RNA_boolean_set(&op_props, "cycle", cycle);
 
-  WM_operator_name_call_ptr(C, ot, WM_OP_EXEC_DEFAULT, &op_props);
+  WM_operator_name_call_ptr(C, ot, WM_OP_EXEC_DEFAULT, &op_props, NULL);
   WM_operator_properties_free(&op_props);
 
   bToolRef *tref = WM_toolsystem_ref_find(workspace, tkey);

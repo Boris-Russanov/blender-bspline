@@ -459,7 +459,7 @@ static int voxel_size_edit_invoke(bContext *C, wmOperator *op, const wmEvent *ev
   op->customdata = cd;
 
   /* Select the front facing face of the mesh bounding box. */
-  BoundBox *bb = BKE_mesh_boundbox_get(cd->active_object);
+  const BoundBox *bb = BKE_mesh_boundbox_get(cd->active_object);
 
   /* Indices of the Bounding Box faces. */
   const int BB_faces[6][4] = {
@@ -885,9 +885,6 @@ static void quadriflow_start_job(void *customdata, short *stop, short *do_update
   BKE_mesh_nomain_to_mesh(new_mesh, mesh, ob, &CD_MASK_MESH, true);
 
   if (qj->smooth_normals) {
-    if (qj->use_mesh_symmetry) {
-      BKE_mesh_calc_normals(static_cast<Mesh *>(ob->data));
-    }
     BKE_mesh_smooth_flag_set(static_cast<Mesh *>(ob->data), true);
   }
 

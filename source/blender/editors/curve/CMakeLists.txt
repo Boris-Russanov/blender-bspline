@@ -14,6 +14,8 @@ set(INC
   ../../../../intern/glew-mx
   ../../../../intern/guardedalloc
   ../../../../extern/curve_fit_nd
+  # RNA_prototypes.h
+  ${CMAKE_BINARY_DIR}/source/blender/makesrna
 )
 
 set(SRC
@@ -23,6 +25,7 @@ set(SRC
   editcurve_paint.c
   editcurve_query.c
   editcurve_select.c
+  editcurve_pen.c
   editcurve_undo.c
   editfont.c
   editfont_undo.c
@@ -38,3 +41,6 @@ set(LIB
 
 
 blender_add_lib(bf_editor_curve "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+# RNA_prototypes.h
+add_dependencies(bf_editor_curve bf_rna)

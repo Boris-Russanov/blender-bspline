@@ -424,7 +424,7 @@ static const EnumPropertyItem rna_enum_shading_color_type_items[] = {
     {V3D_SHADING_SINGLE_COLOR, "SINGLE", 0, "Single", "Show scene in a single color"},
     {V3D_SHADING_OBJECT_COLOR, "OBJECT", 0, "Object", "Show object color"},
     {V3D_SHADING_RANDOM_COLOR, "RANDOM", 0, "Random", "Show random object color"},
-    {V3D_SHADING_VERTEX_COLOR, "VERTEX", 0, "Vertex", "Show active vertex color"},
+    {V3D_SHADING_VERTEX_COLOR, "VERTEX", 0, "Color", "Show active color attribute"},
     {V3D_SHADING_TEXTURE_COLOR, "TEXTURE", 0, "Texture", "Show texture"},
     {0, NULL, 0, NULL, NULL},
 };
@@ -3497,7 +3497,7 @@ static void rna_def_space_image_uv(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Display Faces", "Display faces over the image");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_IMAGE, NULL);
 
-  prop = RNA_def_property(srna, "tile_grid_shape", PROP_INT, PROP_NONE);
+  prop = RNA_def_property(srna, "tile_grid_shape", PROP_INT, PROP_XYZ);
   RNA_def_property_int_sdna(prop, NULL, "tile_grid_shape");
   RNA_def_property_array(prop, 2);
   RNA_def_property_int_default(prop, 1);
@@ -3593,6 +3593,21 @@ static void rna_def_space_outliner(BlenderRNA *brna)
       {0, NULL, 0, NULL, NULL},
   };
 
+  static const EnumPropertyItem lib_override_view_mode[] = {
+      {SO_LIB_OVERRIDE_VIEW_PROPERTIES,
+       "PROPERTIES",
+       ICON_NONE,
+       "Properties",
+       "Display all local override data-blocks with their overridden properties and buttons to "
+       "edit them"},
+      {SO_LIB_OVERRIDE_VIEW_HIERARCHIES,
+       "HIERARCHIES",
+       ICON_NONE,
+       "Hierarchies",
+       "Display library override relationships"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
   static const EnumPropertyItem filter_state_items[] = {
       {SO_FILTER_OB_ALL, "ALL", 0, "All", "Show all objects in the view layer"},
       {SO_FILTER_OB_VISIBLE, "VISIBLE", 0, "Visible", "Show visible objects"},
@@ -3610,6 +3625,13 @@ static void rna_def_space_outliner(BlenderRNA *brna)
   RNA_def_property_enum_sdna(prop, NULL, "outlinevis");
   RNA_def_property_enum_items(prop, display_mode_items);
   RNA_def_property_ui_text(prop, "Display Mode", "Type of information to display");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_OUTLINER, NULL);
+
+  prop = RNA_def_property(srna, "lib_override_view_mode", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_items(prop, lib_override_view_mode);
+  RNA_def_property_ui_text(prop,
+                           "Library Override View Mode",
+                           "Choose different visualizations of library override data");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_OUTLINER, NULL);
 
   prop = RNA_def_property(srna, "filter_text", PROP_STRING, PROP_NONE);
@@ -3772,13 +3794,6 @@ static void rna_def_space_outliner(BlenderRNA *brna)
   RNA_def_property_enum_items(prop, rna_enum_id_type_items);
   RNA_def_property_ui_text(prop, "Filter by Type", "Data-block type to show");
   RNA_def_property_translation_context(prop, BLT_I18NCONTEXT_ID_ID);
-
-  prop = RNA_def_property(srna, "use_filter_lib_override", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_negative_sdna(prop, NULL, "filter", SO_FILTER_NO_LIB_OVERRIDE);
-  RNA_def_property_ui_text(prop,
-                           "Show Library Overrides",
-                           "For libraries with overrides created, show the overridden values");
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_OUTLINER, NULL);
 
   prop = RNA_def_property(srna, "use_filter_lib_override_system", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "filter", SO_FILTER_SHOW_SYSTEM_OVERRIDES);
@@ -5249,6 +5264,11 @@ static void rna_def_space_image_overlay(BlenderRNA *brna)
   prop = RNA_def_property(srna, "show_overlays", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "overlay.flag", SI_OVERLAY_SHOW_OVERLAYS);
   RNA_def_property_ui_text(prop, "Show Overlays", "Display overlays like UV Maps and Metadata");
+
+  prop = RNA_def_property(srna, "show_grid_background", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "overlay.flag", SI_OVERLAY_SHOW_GRID_BACKGROUND);
+  RNA_def_property_ui_text(prop, "Display Background", "Show the grid background and borders");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_IMAGE, NULL);
 }
 
 static void rna_def_space_image(BlenderRNA *brna)
@@ -5598,7 +5618,8 @@ static void rna_def_space_sequencer(BlenderRNA *brna)
 
   rna_def_space_generic_show_region_toggles(srna,
                                             (1 << RGN_TYPE_TOOL_HEADER) | (1 << RGN_TYPE_UI) |
-                                                (1 << RGN_TYPE_TOOLS) | (1 << RGN_TYPE_HUD));
+                                                (1 << RGN_TYPE_TOOLS) | (1 << RGN_TYPE_HUD) |
+                                                (1 << RGN_TYPE_CHANNELS));
 
   /* view type, fairly important */
   prop = RNA_def_property(srna, "view_type", PROP_ENUM, PROP_NONE);
@@ -7122,6 +7143,13 @@ static void rna_def_space_node_overlay(BlenderRNA *brna)
   RNA_def_property_boolean_default(prop, true);
   RNA_def_property_ui_text(prop, "Show Tree Path", "Display breadcrumbs for the editor's context");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_NODE, NULL);
+
+  prop = RNA_def_property(srna, "show_named_attributes", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "overlay.flag", SN_OVERLAY_SHOW_NAMED_ATTRIBUTES);
+  RNA_def_property_boolean_default(prop, true);
+  RNA_def_property_ui_text(
+      prop, "Show Named Attributes", "Show when nodes are using named attributes");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_NODE, NULL);
 }
 
 static void rna_def_space_node(BlenderRNA *brna)
@@ -7722,6 +7750,12 @@ static void rna_def_spreadsheet_row_filter(BlenderRNA *brna)
   prop = RNA_def_property(srna, "value_color", PROP_FLOAT, PROP_NONE);
   RNA_def_property_array(prop, 4);
   RNA_def_property_ui_text(prop, "Color Value", "");
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_SPREADSHEET, NULL);
+
+  prop = RNA_def_property(srna, "value_byte_color", PROP_INT, PROP_NONE);
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_range(prop, 0, 255);
+  RNA_def_property_ui_text(prop, "Byte Color Value", "");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_SPREADSHEET, NULL);
 
   prop = RNA_def_property(srna, "value_string", PROP_STRING, PROP_NONE);

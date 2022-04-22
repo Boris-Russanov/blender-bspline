@@ -15,6 +15,7 @@
 #include "BKE_context.h"
 #include "BKE_report.h"
 
+#include "SEQ_channels.h"
 #include "SEQ_iterator.h"
 #include "SEQ_relations.h"
 #include "SEQ_sequencer.h"
@@ -27,6 +28,7 @@
 #include "UI_view2d.h"
 
 #include "RNA_access.h"
+#include "RNA_prototypes.h"
 
 #include "transform.h"
 #include "transform_convert.h"
@@ -120,7 +122,8 @@ void createTransSeqImageData(TransInfo *t)
   }
 
   ListBase *seqbase = SEQ_active_seqbase_get(ed);
-  SeqCollection *strips = SEQ_query_rendered_strips(seqbase, t->scene->r.cfra, 0);
+  ListBase *channels = SEQ_channels_displayed_get(ed);
+  SeqCollection *strips = SEQ_query_rendered_strips(channels, seqbase, t->scene->r.cfra, 0);
   SEQ_filter_selected_strips(strips);
 
   const int count = SEQ_collection_len(strips);

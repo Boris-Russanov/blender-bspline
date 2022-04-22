@@ -59,6 +59,8 @@ class OBJMesh : NonCopyable {
    * object's world transform matrix.
    */
   float world_and_axes_transform_[4][4];
+  float world_and_axes_normal_transform_[3][3];
+  bool mirrored_transform_;
 
   /**
    * Total UV vertices in a mesh's texture map.
@@ -93,6 +95,10 @@ class OBJMesh : NonCopyable {
    * Polygon aligned array of their smooth groups.
    */
   int *poly_smooth_groups_ = nullptr;
+  /**
+   * Order in which the polygons should be written into the file (sorted by material index).
+   */
+  Vector<int> poly_order_;
 
  public:
   /**
@@ -110,6 +116,11 @@ class OBJMesh : NonCopyable {
   int tot_uv_vertices() const;
   int tot_normal_indices() const;
   int tot_edges() const;
+  int tot_deform_groups() const;
+  bool is_mirrored_transform() const
+  {
+    return mirrored_transform_;
+  }
 
   /**
    * \return Total materials in the object.
@@ -194,13 +205,15 @@ class OBJMesh : NonCopyable {
    */
   Vector<int> calc_poly_normal_indices(int poly_index) const;
   /**
-   * Find the index of the vertex group with the maximum number of vertices in a polygon.
-   * The index indices into the #Object.defbase.
+   * Find the most representative vertex group of a polygon.
    *
-   * If two or more groups have the same number of vertices (maximum), group name depends on the
-   * implementation of #std::max_element.
+   * This adds up vertex group weights, and the group with the largest
+   * weight sum across the polygon is the one returned.
+   *
+   * group_weights is temporary storage to avoid reallocations, it must
+   * be the size of amount of vertex groups in the object.
    */
-  int16_t get_poly_deform_group_index(int poly_index) const;
+  int16_t get_poly_deform_group_index(int poly_index, MutableSpan<float> group_weights) const;
   /**
    * Find the name of the vertex deform group at the given index.
    * The index indices into the #Object.defbase.
@@ -211,6 +224,22 @@ class OBJMesh : NonCopyable {
    * Calculate vertex indices of an edge's corners if it is a loose edge.
    */
   std::optional<std::array<int, 2>> calc_loose_edge_vert_indices(int edge_index) const;
+
+  /**
+   * Calculate the order in which the polygons should be written into the file (sorted by material
+   * index).
+   */
+  void calc_poly_order();
+
+  /**
+   * Remap polygon index according to polygon writing order.
+   * When materials are not being written, the polygon order array
+   * might be empty, in which case remap is a no-op.
+   */
+  int remap_poly_index(int i) const
+  {
+    return i < 0 || i >= poly_order_.size() ? i : poly_order_[i];
+  }
 
  private:
   /**

@@ -24,6 +24,7 @@
 #include "UI_resources.h"
 
 #include "RNA_access.h"
+#include "RNA_prototypes.h"
 
 #include "MOD_modifiertypes.h"
 #include "MOD_ui_common.h"
@@ -68,6 +69,7 @@ static Mesh *WireframeModifier_do(WireframeModifierData *wmd, Object *ob, Mesh *
                             &(struct BMeshCreateParams){0},
                             &(struct BMeshFromMeshParams){
                                 .calc_face_normal = true,
+                                .calc_vert_normal = true,
                                 .add_key_index = false,
                                 .use_shapekey = false,
                                 .active_shapekey = 0,
@@ -94,8 +96,6 @@ static Mesh *WireframeModifier_do(WireframeModifierData *wmd, Object *ob, Mesh *
 
   result = BKE_mesh_from_bmesh_for_eval_nomain(bm, NULL, mesh);
   BM_mesh_free(bm);
-
-  BKE_mesh_normals_tag_dirty(result);
 
   return result;
 }

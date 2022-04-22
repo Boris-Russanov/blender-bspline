@@ -50,7 +50,6 @@ set(SRC_KERNEL_DEVICE_GPU_HEADERS
   device/gpu/kernel.h
   device/gpu/parallel_active_index.h
   device/gpu/parallel_prefix_sum.h
-  device/gpu/parallel_reduce.h
   device/gpu/parallel_sorted_index.h
   device/gpu/work_stealing.h
 )
@@ -224,6 +223,7 @@ set(SRC_KERNEL_INTEGRATOR_HEADERS
   integrator/intersect_subsurface.h
   integrator/intersect_volume_stack.h
   integrator/megakernel.h
+  integrator/mnee.h
   integrator/path_state.h
   integrator/shade_background.h
   integrator/shade_light.h
@@ -406,6 +406,11 @@ if(WITH_CYCLES_CUDA_BINARIES)
       --use_fast_math
       -o ${CMAKE_CURRENT_BINARY_DIR}/${cuda_file}
       -Wno-deprecated-gpu-targets)
+
+    if(CUDA_HOST_COMPILER)
+      set(cuda_flags ${cuda_flags}
+        -ccbin="${CUDA_HOST_COMPILER}")
+    endif()
 
     if(WITH_NANOVDB)
       set(cuda_flags ${cuda_flags}

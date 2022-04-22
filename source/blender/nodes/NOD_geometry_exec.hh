@@ -6,6 +6,7 @@
 #include "FN_multi_function_builder.hh"
 
 #include "BKE_attribute_access.hh"
+#include "BKE_geometry_fields.hh"
 #include "BKE_geometry_set.hh"
 #include "BKE_geometry_set_instances.hh"
 
@@ -32,22 +33,14 @@ using bke::ReadAttributeLookup;
 using bke::StrongAnonymousAttributeID;
 using bke::WeakAnonymousAttributeID;
 using bke::WriteAttributeLookup;
-using fn::CPPType;
 using fn::Field;
 using fn::FieldContext;
 using fn::FieldEvaluator;
 using fn::FieldInput;
 using fn::FieldOperation;
 using fn::GField;
-using fn::GMutablePointer;
-using fn::GMutableSpan;
-using fn::GPointer;
-using fn::GSpan;
-using fn::GVArray;
-using fn::GVArray_GSpan;
-using fn::GVMutableArray;
-using fn::GVMutableArray_GSpan;
 using fn::ValueOrField;
+using geometry_nodes_eval_log::NamedAttributeUsage;
 using geometry_nodes_eval_log::NodeWarningType;
 
 /**
@@ -349,6 +342,8 @@ class GeoNodeExecParams {
   std::string attribute_producer_name() const;
 
   void set_default_remaining_outputs();
+
+  void used_named_attribute(std::string attribute_name, NamedAttributeUsage usage);
 
  private:
   /* Utilities for detecting common errors at when using this class. */

@@ -2,7 +2,7 @@
 # Copyright 2011-2022 Blender Foundation
 
 # Standalone or with Blender
-if(NOT WITH_BLENDER AND WITH_CYCLES_STANDALONE)
+if(NOT WITH_BLENDER)
   set(CYCLES_INSTALL_PATH ${CMAKE_INSTALL_PREFIX})
 else()
   set(WITH_CYCLES_BLENDER ON)
@@ -215,6 +215,15 @@ add_definitions(
   -DCCL_NAMESPACE_END=}
 )
 
+include_directories(
+  SYSTEM
+  ${BOOST_INCLUDE_DIR}
+  ${OPENIMAGEIO_INCLUDE_DIRS}
+  ${OPENEXR_INCLUDE_DIRS}
+  ${PUGIXML_INCLUDE_DIR}
+  ${TBB_INCLUDE_DIRS}
+)
+
 if(WITH_CYCLES_DEBUG)
   add_definitions(-DWITH_CYCLES_DEBUG)
 endif()
@@ -255,7 +264,6 @@ endif()
 
 if(WITH_CYCLES_EMBREE)
   add_definitions(-DWITH_EMBREE)
-  add_definitions(-DEMBREE_STATIC_LIB)
   include_directories(
     SYSTEM
     ${EMBREE_INCLUDE_DIRS}
@@ -280,7 +288,6 @@ endif()
 
 if(WITH_OPENIMAGEDENOISE)
   add_definitions(-DWITH_OPENIMAGEDENOISE)
-  add_definitions(-DOIDN_STATIC_LIB)
   include_directories(
     SYSTEM
     ${OPENIMAGEDENOISE_INCLUDE_DIRS}
@@ -308,17 +315,6 @@ if(NOT OPENIMAGEIO_PUGIXML_FOUND)
   add_definitions(-DWITH_SYSTEM_PUGIXML)
 endif()
 
-include_directories(
-  SYSTEM
-  ${BOOST_INCLUDE_DIR}
-  ${OPENIMAGEIO_INCLUDE_DIRS}
-  ${OPENIMAGEIO_INCLUDE_DIRS}/OpenImageIO
-  ${OPENEXR_INCLUDE_DIR}
-  ${OPENEXR_INCLUDE_DIRS}
-  ${PUGIXML_INCLUDE_DIR}
-  ${TBB_INCLUDE_DIRS}
-)
-
 if(CYCLES_STANDALONE_REPOSITORY)
   include_directories(../third_party/atomic)
 else()
@@ -333,6 +329,14 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_C_COMPILER_ID MATCHES "Clang")
   unset(_has_cxxflag_float_conversion)
   unset(_has_cxxflag_double_promotion)
   unset(_has_no_error_unused_macros)
+endif()
+
+if(WITH_CYCLES_HYDRA_RENDER_DELEGATE AND (NOT WITH_USD))
+  message(STATUS "USD not found, disabling WITH_CYCLES_HYDRA_RENDER_DELEGATE")
+  set(WITH_CYCLES_HYDRA_RENDER_DELEGATE OFF)
+endif()
+if(WITH_CYCLES_HYDRA_RENDER_DELEGATE AND (NOT WITH_BLENDER) AND (NOT WITH_CYCLES_STANDALONE))
+  set(CYCLES_INSTALL_PATH ${CYCLES_INSTALL_PATH}/hdCycles/resources)
 endif()
 
 if(WITH_CYCLES_CUDA_BINARIES AND (NOT WITH_CYCLES_CUBIN_COMPILER))
@@ -395,6 +399,10 @@ if(WITH_GTESTS)
   add_subdirectory(test)
 endif()
 
-if(NOT WITH_BLENDER AND WITH_CYCLES_STANDALONE)
+if(WITH_CYCLES_HYDRA_RENDER_DELEGATE)
+  add_subdirectory(hydra)
+endif()
+
+if(NOT WITH_BLENDER)
   delayed_do_install(${CMAKE_BINARY_DIR}/bin)
 endif()

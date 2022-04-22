@@ -55,6 +55,7 @@
 #include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
 #include "GPU_matrix.h"
+#include "GPU_platform.h"
 #include "GPU_shader_shared.h"
 #include "GPU_state.h"
 #include "GPU_uniform_buffer.h"
@@ -85,6 +86,7 @@
 
 #include "engines/basic/basic_engine.h"
 #include "engines/eevee/eevee_engine.h"
+#include "engines/eevee_next/eevee_engine.h"
 #include "engines/external/external_engine.h"
 #include "engines/gpencil/gpencil_engine.h"
 #include "engines/image/image_engine.h"
@@ -195,7 +197,7 @@ bool DRW_object_is_renderable(const Object *ob)
 bool DRW_object_is_in_edit_mode(const Object *ob)
 {
   if (BKE_object_is_in_editmode(ob)) {
-    if (ob->type == OB_MESH) {
+    if (ELEM(ob->type, OB_MESH, OB_CURVES)) {
       if ((ob->mode & OB_MODE_EDIT) == 0) {
         return false;
       }
@@ -476,6 +478,7 @@ void DRW_viewport_data_free(DRWData *drw_data)
     MEM_freeN(drw_data->matrices_ubo);
     MEM_freeN(drw_data->obinfos_ubo);
   }
+  DRW_volume_ubos_pool_free(drw_data->volume_grids_ubos);
   MEM_freeN(drw_data);
 }
 
@@ -615,7 +618,7 @@ static void drw_manager_init(DRWManager *dst, GPUViewport *viewport, const int s
   }
 
   if (G_draw.view_ubo == NULL) {
-    G_draw.view_ubo = GPU_uniformbuf_create_ex(sizeof(DRWViewUboStorage), NULL, "G_draw.view_ubo");
+    G_draw.view_ubo = GPU_uniformbuf_create_ex(sizeof(ViewInfos), NULL, "G_draw.view_ubo");
   }
 
   if (dst->draw_list == NULL) {
@@ -1284,6 +1287,10 @@ void DRW_notify_view_update(const DRWUpdateContext *update_ctx)
 
   const bool gpencil_engine_needed = drw_gpencil_engine_needed(depsgraph, v3d);
 
+  if (G.is_rendering) {
+    return;
+  }
+
   /* XXX Really nasty locking. But else this could
    * be executed by the material previews thread
    * while rendering a viewport. */
@@ -1644,6 +1651,8 @@ void DRW_draw_render_loop_ex(struct Depsgraph *depsgraph,
 
   drw_debug_init();
   DRW_hair_init();
+  DRW_volume_init(DST.vmempool);
+  DRW_smoke_init(DST.vmempool);
 
   /* No frame-buffer allowed before drawing. */
   BLI_assert(GPU_framebuffer_active_get() == GPU_framebuffer_back_get());
@@ -1705,7 +1714,11 @@ void DRW_draw_render_loop_ex(struct Depsgraph *depsgraph,
   drw_engines_draw_scene();
 
   /* Fix 3D view "lagging" on APPLE and WIN32+NVIDIA. (See T56996, T61474) */
-  GPU_flush();
+  if (GPU_type_matches_ex(GPU_DEVICE_ANY, GPU_OS_ANY, GPU_DRIVER_ANY, GPU_BACKEND_OPENGL)) {
+    GPU_flush();
+  }
+
+  DRW_smoke_exit(DST.vmempool);
 
   DRW_stats_reset();
 
@@ -1937,6 +1950,9 @@ void DRW_render_to_image(RenderEngine *engine, struct Depsgraph *depsgraph)
   };
   drw_context_state_init();
 
+  /* Begin GPU workload Boundary */
+  GPU_render_begin();
+
   const int size[2] = {engine->resolution_x, engine->resolution_y};
 
   drw_manager_init(&DST, NULL, size);
@@ -1988,10 +2004,15 @@ void DRW_render_to_image(RenderEngine *engine, struct Depsgraph *depsgraph)
 
   GPU_framebuffer_restore();
 
+  DRW_smoke_exit(DST.vmempool);
+
   drw_manager_exit(&DST);
 
   /* Reset state after drawing */
   DRW_state_reset();
+
+  /* End GPU workload Boundary */
+  GPU_render_end();
 }
 
 void DRW_render_object_iter(
@@ -2002,6 +2023,8 @@ void DRW_render_object_iter(
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
   DRW_hair_init();
+  DRW_volume_init(DST.vmempool);
+  DRW_smoke_init(DST.vmempool);
 
   drw_task_graph_init();
   const int object_type_exclude_viewport = draw_ctx->v3d ?
@@ -2057,6 +2080,8 @@ void DRW_custom_pipeline(DrawEngineType *draw_engine_type,
   drw_manager_init(&DST, NULL, NULL);
 
   DRW_hair_init();
+  DRW_volume_init(DST.vmempool);
+  DRW_smoke_init(DST.vmempool);
 
   ViewportEngineData *data = DRW_view_data_engine_data_get_ensure(DST.view_data_active,
                                                                   draw_engine_type);
@@ -2065,24 +2090,33 @@ void DRW_custom_pipeline(DrawEngineType *draw_engine_type,
   callback(data, user_data);
   DST.buffer_finish_called = false;
 
+  DRW_smoke_exit(DST.vmempool);
+
   GPU_framebuffer_restore();
 
   /* The use of custom pipeline in other thread using the same
    * resources as the main thread (viewport) may lead to data
    * races and undefined behavior on certain drivers. Using
    * GPU_finish to sync seems to fix the issue. (see T62997) */
-  GPU_finish();
+  eGPUBackendType type = GPU_backend_get_type();
+  if (type == GPU_BACKEND_OPENGL) {
+    GPU_finish();
+  }
 
   drw_manager_exit(&DST);
 }
 
 void DRW_cache_restart(void)
 {
+  DRW_smoke_exit(DST.vmempool);
+
   drw_manager_init(&DST, DST.viewport, (int[2]){UNPACK2(DST.size)});
 
   DST.buffer_finish_called = false;
 
   DRW_hair_init();
+  DRW_volume_init(DST.vmempool);
+  DRW_smoke_init(DST.vmempool);
 }
 
 void DRW_draw_render_loop_2d_ex(struct Depsgraph *depsgraph,
@@ -2172,7 +2206,9 @@ void DRW_draw_render_loop_2d_ex(struct Depsgraph *depsgraph,
   drw_engines_draw_scene();
 
   /* Fix 3D view being "laggy" on macos and win+nvidia. (See T56996, T61474) */
-  GPU_flush();
+  if (GPU_type_matches_ex(GPU_DEVICE_ANY, GPU_OS_ANY, GPU_DRIVER_ANY, GPU_BACKEND_OPENGL)) {
+    GPU_flush();
+  }
 
   if (DST.draw_ctx.evil_C) {
     DefaultFramebufferList *dfbl = DRW_viewport_framebuffer_list_get();
@@ -2398,6 +2434,8 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
   /* Init engines */
   drw_engines_init();
   DRW_hair_init();
+  DRW_volume_init(DST.vmempool);
+  DRW_smoke_init(DST.vmempool);
 
   {
     drw_engines_cache_init();
@@ -2492,6 +2530,8 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
     }
   }
 
+  DRW_smoke_exit(DST.vmempool);
+
   DRW_state_reset();
   drw_engines_disable();
 
@@ -2568,6 +2608,8 @@ static void drw_draw_depth_loop_impl(struct Depsgraph *depsgraph,
   /* Init engines */
   drw_engines_init();
   DRW_hair_init();
+  DRW_volume_init(DST.vmempool);
+  DRW_smoke_init(DST.vmempool);
 
   {
     drw_engines_cache_init();
@@ -2603,6 +2645,8 @@ static void drw_draw_depth_loop_impl(struct Depsgraph *depsgraph,
   DRW_hair_update();
 
   drw_engines_draw_scene();
+
+  DRW_smoke_exit(DST.vmempool);
 
   DRW_state_reset();
 
@@ -2898,6 +2942,13 @@ void DRW_engine_register(DrawEngineType *draw_engine_type)
   g_registered_engines.len = BLI_listbase_count(&g_registered_engines.engines);
 }
 
+void DRW_engines_register_experimental(void)
+{
+  if (U.experimental.enable_eevee_next) {
+    RE_engines_register(&DRW_engine_viewport_eevee_next_type);
+  }
+}
+
 void DRW_engines_register(void)
 {
   RE_engines_register(&DRW_engine_viewport_eevee_type);
@@ -2983,6 +3034,7 @@ void DRW_engines_free(void)
 
   DRW_shaders_free();
   DRW_hair_free();
+  DRW_volume_free();
   DRW_shape_cache_free();
   DRW_stats_free();
   DRW_globals_free();
@@ -3086,6 +3138,7 @@ void DRW_opengl_context_enable_ex(bool UNUSED(restore))
      * This shall remain in effect until immediate mode supports
      * multiple threads. */
     BLI_ticket_mutex_lock(DST.gl_context_mutex);
+    GPU_render_begin();
     WM_opengl_context_activate(DST.gl_context);
     GPU_context_active_set(DST.gpu_context);
   }
@@ -3097,7 +3150,9 @@ void DRW_opengl_context_disable_ex(bool restore)
 #ifdef __APPLE__
     /* Need to flush before disabling draw context, otherwise it does not
      * always finish drawing and viewport can be empty or partially drawn */
-    GPU_flush();
+    if (GPU_type_matches_ex(GPU_DEVICE_ANY, GPU_OS_MAC, GPU_DRIVER_ANY, GPU_BACKEND_OPENGL)) {
+      GPU_flush();
+    }
 #endif
 
     if (BLI_thread_is_main() && restore) {
@@ -3107,6 +3162,10 @@ void DRW_opengl_context_disable_ex(bool restore)
       WM_opengl_context_release(DST.gl_context);
       GPU_context_active_set(NULL);
     }
+
+    /* Render boundaries are opened and closed here as this may be
+     * called outside of an existing render loop. */
+    GPU_render_end();
 
     BLI_ticket_mutex_unlock(DST.gl_context_mutex);
   }

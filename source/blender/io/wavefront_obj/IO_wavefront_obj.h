@@ -55,6 +55,7 @@ struct OBJExportParams {
 
   /* File Write Options. */
   bool export_selected_objects;
+  bool apply_modifiers;
   eEvaluationMode export_eval_mode;
   bool export_uv;
   bool export_normals;
@@ -76,6 +77,24 @@ struct OBJExportParams {
   bool smooth_groups_bitflags;
 };
 
+struct OBJImportParams {
+  /** Full path to the source OBJ file to import. */
+  char filepath[FILE_MAX];
+  /** Value 0 disables clamping. */
+  float clamp_size;
+  eTransformAxisForward forward_axis;
+  eTransformAxisUp up_axis;
+  bool validate_meshes;
+};
+
+/**
+ * Time the full import process.
+ */
+void OBJ_import(bContext *C, const struct OBJImportParams *import_params);
+
+/**
+ * C-interface for the exporter.
+ */
 void OBJ_export(bContext *C, const struct OBJExportParams *export_params);
 
 #ifdef __cplusplus

@@ -72,15 +72,15 @@ typedef unsigned long long uint64_t;
 
 #define ccl_gpu_syncthreads() __syncthreads()
 #define ccl_gpu_ballot(predicate) __ballot_sync(0xFFFFFFFF, predicate)
-#define ccl_gpu_shfl_down_sync(mask, var, detla) __shfl_down_sync(mask, var, detla)
 
 /* GPU texture objects */
 
 typedef unsigned long long CUtexObject;
-typedef CUtexObject ccl_gpu_tex_object;
+typedef CUtexObject ccl_gpu_tex_object_2D;
+typedef CUtexObject ccl_gpu_tex_object_3D;
 
 template<typename T>
-ccl_device_forceinline T ccl_gpu_tex_object_read_2D(const ccl_gpu_tex_object texobj,
+ccl_device_forceinline T ccl_gpu_tex_object_read_2D(const ccl_gpu_tex_object_2D texobj,
                                                     const float x,
                                                     const float y)
 {
@@ -88,7 +88,7 @@ ccl_device_forceinline T ccl_gpu_tex_object_read_2D(const ccl_gpu_tex_object tex
 }
 
 template<typename T>
-ccl_device_forceinline T ccl_gpu_tex_object_read_3D(const ccl_gpu_tex_object texobj,
+ccl_device_forceinline T ccl_gpu_tex_object_read_3D(const ccl_gpu_tex_object_3D texobj,
                                                     const float x,
                                                     const float y,
                                                     const float z)

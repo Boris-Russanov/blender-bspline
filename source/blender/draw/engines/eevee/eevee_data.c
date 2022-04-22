@@ -104,10 +104,12 @@ void EEVEE_motion_blur_data_free(EEVEE_MotionBlurData *mb)
   for (int i = 0; i < 2; i++) {
     if (mb->position_vbo_cache[i]) {
       BLI_ghash_free(mb->position_vbo_cache[i], NULL, (GHashValFreeFP)GPU_vertbuf_discard);
+      mb->position_vbo_cache[i] = NULL;
     }
     if (mb->hair_motion_step_cache[i]) {
       BLI_ghash_free(
           mb->hair_motion_step_cache[i], NULL, (GHashValFreeFP)EEVEE_motion_hair_step_free);
+      mb->hair_motion_step_cache[i] = NULL;
     }
   }
 }
@@ -158,10 +160,22 @@ EEVEE_HairMotionData *EEVEE_motion_blur_hair_data_get(EEVEE_ObjectMotionData *mb
 {
   if (mb_data->hair_data == NULL) {
     /* Ugly, we allocate for each modifiers and just fill based on modifier index in the list. */
-    int psys_len = (ob->type != OB_CURVES) ? BLI_listbase_count(&ob->modifiers) : 1;
+    int psys_len = BLI_listbase_count(&ob->modifiers);
     EEVEE_HairMotionData *hair_step = MEM_callocN(
         sizeof(EEVEE_HairMotionData) + sizeof(hair_step->psys[0]) * psys_len, __func__);
     hair_step->psys_len = psys_len;
+    hair_step->type = EEVEE_MOTION_DATA_HAIR;
+    mb_data->hair_data = hair_step;
+  }
+  return mb_data->hair_data;
+}
+
+EEVEE_HairMotionData *EEVEE_motion_blur_curves_data_get(EEVEE_ObjectMotionData *mb_data)
+{
+  if (mb_data->hair_data == NULL) {
+    EEVEE_HairMotionData *hair_step = MEM_callocN(
+        sizeof(EEVEE_HairMotionData) + sizeof(hair_step->psys[0]), __func__);
+    hair_step->psys_len = 1;
     hair_step->type = EEVEE_MOTION_DATA_HAIR;
     mb_data->hair_data = hair_step;
   }

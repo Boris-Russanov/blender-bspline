@@ -217,6 +217,11 @@ void rna_AttributeGroup_iterator_next(CollectionPropertyIterator *iter);
 PointerRNA rna_AttributeGroup_iterator_get(CollectionPropertyIterator *iter);
 int rna_AttributeGroup_length(PointerRNA *ptr);
 
+void rna_AttributeGroup_color_iterator_begin(CollectionPropertyIterator *iter, PointerRNA *ptr);
+void rna_AttributeGroup_color_iterator_next(CollectionPropertyIterator *iter);
+PointerRNA rna_AttributeGroup_color_iterator_get(CollectionPropertyIterator *iter);
+int rna_AttributeGroup_color_length(PointerRNA *ptr);
+
 void rna_def_animdata_common(struct StructRNA *srna);
 
 bool rna_AnimaData_override_apply(struct Main *bmain,
@@ -355,10 +360,14 @@ void rna_ViewLayer_active_aov_index_range(
     PointerRNA *ptr, int *min, int *max, int *softmin, int *softmax);
 int rna_ViewLayer_active_aov_index_get(PointerRNA *ptr);
 void rna_ViewLayer_active_aov_index_set(PointerRNA *ptr, int value);
+void rna_ViewLayer_active_lightgroup_index_range(
+    PointerRNA *ptr, int *min, int *max, int *softmin, int *softmax);
+int rna_ViewLayer_active_lightgroup_index_get(PointerRNA *ptr);
+void rna_ViewLayer_active_lightgroup_index_set(PointerRNA *ptr, int value);
 /**
- *  Set `r_rna_path` with the base view-layer path.
- *  `rna_path_buffer_size` should be at least `sizeof(ViewLayer.name) * 3`.
- *  \return actual length of the generated RNA path.
+ * Set `r_rna_path` with the base view-layer path.
+ * `rna_path_buffer_size` should be at least `sizeof(ViewLayer.name) * 3`.
+ * \return actual length of the generated RNA path.
  */
 size_t rna_ViewLayer_path_buffer_get(struct ViewLayer *view_layer,
                                      char *r_rna_path,
@@ -393,7 +402,15 @@ char *rna_TextureSlot_path(struct PointerRNA *ptr);
 char *rna_Node_ImageUser_path(struct PointerRNA *ptr);
 
 /* Set U.is_dirty and redraw. */
+
+/**
+ * Use single function so we can more easily break-point it.
+ */
 void rna_userdef_is_dirty_update_impl(void);
+/**
+ * Use as a fallback update handler to ensure #U.runtime.is_dirty is set.
+ * So the preferences are saved when modified.
+ */
 void rna_userdef_is_dirty_update(struct Main *bmain, struct Scene *scene, struct PointerRNA *ptr);
 
 /* API functions */
@@ -492,18 +509,6 @@ void RNA_def_main_simulations(BlenderRNA *brna, PropertyRNA *cprop);
 #endif
 
 /* ID Properties */
-
-extern StringPropertyRNA rna_PropertyGroupItem_string;
-extern IntPropertyRNA rna_PropertyGroupItem_int;
-extern IntPropertyRNA rna_PropertyGroupItem_int_array;
-extern FloatPropertyRNA rna_PropertyGroupItem_float;
-extern FloatPropertyRNA rna_PropertyGroupItem_float_array;
-extern PointerPropertyRNA rna_PropertyGroupItem_group;
-extern PointerPropertyRNA rna_PropertyGroupItem_id;
-extern CollectionPropertyRNA rna_PropertyGroupItem_collection;
-extern CollectionPropertyRNA rna_PropertyGroupItem_idp_array;
-extern FloatPropertyRNA rna_PropertyGroupItem_double;
-extern FloatPropertyRNA rna_PropertyGroupItem_double_array;
 
 #ifndef __RNA_ACCESS_H__
 extern StructRNA RNA_PropertyGroupItem;

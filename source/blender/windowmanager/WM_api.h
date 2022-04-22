@@ -39,6 +39,7 @@ struct MenuType;
 struct PointerRNA;
 struct PropertyRNA;
 struct ScrArea;
+struct SelectPick_Params;
 struct View3D;
 struct ViewLayer;
 struct bContext;
@@ -646,19 +647,29 @@ bool WM_operator_is_repeat(const struct bContext *C, const struct wmOperator *op
 bool WM_operator_name_poll(struct bContext *C, const char *opstring);
 /**
  * Invokes operator in context.
+ *
+ * \param event: Optionally pass in an event to use when context uses one of the
+ * `WM_OP_INVOKE_*` values. When left unset the #wmWindow.eventstate will be used,
+ * this can cause problems for operators that read the events type - for example,
+ * storing the key that was pressed so as to be able to detect it's release.
+ * In these cases it's necessary to forward the current event being handled.
  */
 int WM_operator_name_call_ptr(struct bContext *C,
                               struct wmOperatorType *ot,
                               wmOperatorCallContext context,
-                              struct PointerRNA *properties);
+                              struct PointerRNA *properties,
+                              const wmEvent *event);
+/** See #WM_operator_name_call_ptr */
 int WM_operator_name_call(struct bContext *C,
                           const char *opstring,
                           wmOperatorCallContext context,
-                          struct PointerRNA *properties);
+                          struct PointerRNA *properties,
+                          const wmEvent *event);
 int WM_operator_name_call_with_properties(struct bContext *C,
                                           const char *opstring,
                                           wmOperatorCallContext context,
-                                          struct IDProperty *properties);
+                                          struct IDProperty *properties,
+                                          const wmEvent *event);
 /**
  * Similar to #WM_operator_name_call called with #WM_OP_EXEC_DEFAULT context.
  *
@@ -677,6 +688,7 @@ void WM_operator_name_call_ptr_with_depends_on_cursor(struct bContext *C,
                                                       wmOperatorType *ot,
                                                       wmOperatorCallContext opcontext,
                                                       PointerRNA *properties,
+                                                      const wmEvent *event,
                                                       const char *drawstr);
 
 /**
@@ -729,14 +741,33 @@ bool WM_operator_last_properties_store(struct wmOperator *op);
 /* wm_operator_props.c */
 
 void WM_operator_properties_confirm_or_exec(struct wmOperatorType *ot);
+
+/** Flags for #WM_operator_properties_filesel. */
+typedef enum eFileSel_Flag {
+  WM_FILESEL_RELPATH = 1 << 0,
+  WM_FILESEL_DIRECTORY = 1 << 1,
+  WM_FILESEL_FILENAME = 1 << 2,
+  WM_FILESEL_FILEPATH = 1 << 3,
+  WM_FILESEL_FILES = 1 << 4,
+  /** Show the properties sidebar by default. */
+  WM_FILESEL_SHOW_PROPS = 1 << 5,
+} eFileSel_Flag;
+ENUM_OPERATORS(eFileSel_Flag, WM_FILESEL_SHOW_PROPS)
+
+/** Action for #WM_operator_properties_filesel. */
+typedef enum eFileSel_Action {
+  FILE_OPENFILE = 0,
+  FILE_SAVE = 1,
+} eFileSel_Action;
+
 /**
  * Default properties for file-select.
  */
 void WM_operator_properties_filesel(struct wmOperatorType *ot,
                                     int filter,
                                     short type,
-                                    short action,
-                                    short flag,
+                                    eFileSel_Action action,
+                                    eFileSel_Flag flag,
                                     short display,
                                     short sort);
 /**
@@ -766,6 +797,9 @@ void WM_operator_properties_gesture_straightline(struct wmOperatorType *ot, int 
  * Use with #WM_gesture_circle_invoke
  */
 void WM_operator_properties_gesture_circle(struct wmOperatorType *ot);
+/**
+ * See #ED_select_pick_params_from_operator to initialize parameters defined here.
+ */
 void WM_operator_properties_mouse_select(struct wmOperatorType *ot);
 void WM_operator_properties_select_all(struct wmOperatorType *ot);
 void WM_operator_properties_select_action(struct wmOperatorType *ot,
@@ -829,16 +863,6 @@ void WM_operator_properties_checker_interval_from_op(struct wmOperator *op,
                                                      struct CheckerIntervalParams *op_params);
 bool WM_operator_properties_checker_interval_test(const struct CheckerIntervalParams *op_params,
                                                   int depth);
-
-/* flags for WM_operator_properties_filesel */
-#define WM_FILESEL_RELPATH (1 << 0)
-
-#define WM_FILESEL_DIRECTORY (1 << 1)
-#define WM_FILESEL_FILENAME (1 << 2)
-#define WM_FILESEL_FILEPATH (1 << 3)
-#define WM_FILESEL_FILES (1 << 4)
-/* Show the properties sidebar by default. */
-#define WM_FILESEL_SHOW_PROPS (1 << 5)
 
 /**
  * Operator as a Python command (resulting string must be freed).
@@ -1028,6 +1052,7 @@ bool WM_paneltype_add(struct PanelType *pt);
 void WM_paneltype_remove(struct PanelType *pt);
 
 /* wm_gesture_ops.c */
+
 int WM_gesture_box_invoke(struct bContext *C, struct wmOperator *op, const struct wmEvent *event);
 int WM_gesture_box_modal(struct bContext *C, struct wmOperator *op, const struct wmEvent *event);
 void WM_gesture_box_cancel(struct bContext *C, struct wmOperator *op);

@@ -272,7 +272,7 @@ int IMB_indexer_get_frame_index(struct anim_index *idx, int frameno)
   int middle;
   int first = 0;
 
-  /* bsearch (lower bound) the right index */
+  /* Binary-search (lower bound) the right index. */
 
   while (len > 0) {
     half = len >> 1;
@@ -1123,6 +1123,9 @@ static int indexer_performance_get_decode_rate(FFmpegIndexBuilderContext *contex
     }
   }
 
+  av_packet_free(&packet);
+  av_frame_free(&in_frame);
+
   avcodec_flush_buffers(context->iCodecCtx);
   av_seek_frame(context->iFormatCtx, -1, 0, AVSEEK_FLAG_BACKWARD);
   return frames_decoded;
@@ -1156,6 +1159,8 @@ static int indexer_performance_get_max_gop_size(FFmpegIndexBuilderContext *conte
       break;
     }
   }
+
+  av_packet_free(&packet);
 
   av_seek_frame(context->iFormatCtx, -1, 0, AVSEEK_FLAG_BACKWARD);
   return max_gop;
@@ -1314,14 +1319,14 @@ static void index_rebuild_fallback(FallbackIndexBuilderContext *context,
                                    short *do_update,
                                    float *progress)
 {
-  int cnt = IMB_anim_get_duration(context->anim, IMB_TC_NONE);
+  int count = IMB_anim_get_duration(context->anim, IMB_TC_NONE);
   int i, pos;
   struct anim *anim = context->anim;
 
-  for (pos = 0; pos < cnt; pos++) {
+  for (pos = 0; pos < count; pos++) {
     struct ImBuf *ibuf = IMB_anim_absolute(anim, pos, IMB_TC_NONE, IMB_PROXY_NONE);
     struct ImBuf *tmp_ibuf = IMB_dupImBuf(ibuf);
-    float next_progress = (float)pos / (float)cnt;
+    float next_progress = (float)pos / (float)count;
 
     if (*progress != next_progress) {
       *progress = next_progress;

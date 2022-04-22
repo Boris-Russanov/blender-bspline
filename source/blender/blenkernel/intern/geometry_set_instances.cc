@@ -7,7 +7,6 @@
 #include "BKE_mesh_wrapper.h"
 #include "BKE_modifier.h"
 #include "BKE_pointcloud.h"
-#include "BKE_spline.hh"
 
 #include "DNA_collection_types.h"
 #include "DNA_layer_types.h"
@@ -51,7 +50,12 @@ GeometrySet object_get_evaluated_geometry_set(const Object &object)
     return geometry_set;
   }
   if (object.runtime.geometry_set_eval != nullptr) {
-    return *object.runtime.geometry_set_eval;
+    GeometrySet geometry_set = *object.runtime.geometry_set_eval;
+    /* Ensure that subdivision is performed on the CPU. */
+    if (geometry_set.has_mesh()) {
+      add_final_mesh_as_geometry_component(object, geometry_set);
+    }
+    return geometry_set;
   }
 
   /* Otherwise, construct a new geometry set with the component based on the object type. */
