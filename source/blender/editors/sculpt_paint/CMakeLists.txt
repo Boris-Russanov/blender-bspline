@@ -13,8 +13,8 @@ set(INC
   ../../gpu
   ../../imbuf
   ../../makesdna
-  ../../nodes
   ../../makesrna
+  ../../nodes
   ../../render
   ../../windowmanager
   ../../../../intern/atomic
@@ -22,24 +22,33 @@ set(INC
   ../../../../intern/eigen
   ../../../../intern/glew-mx
   ../../../../intern/guardedalloc
+  # RNA_prototypes.h
+  ${CMAKE_BINARY_DIR}/source/blender/makesrna
 )
 
 set(SRC
+  curves_sculpt_3d_brush.cc
+  curves_sculpt_add.cc
+  curves_sculpt_comb.cc
+  curves_sculpt_delete.cc
+  curves_sculpt_grow_shrink.cc
   curves_sculpt_ops.cc
+  curves_sculpt_snake_hook.cc
+  paint_canvas.cc
   paint_cursor.c
   paint_curve.c
   paint_curve_undo.c
   paint_hide.c
   paint_image.cc
-  paint_image_ops_paint.cc
   paint_image_2d.c
   paint_image_2d_curve_mask.cc
+  paint_image_ops_paint.cc
   paint_image_proj.c
   paint_mask.c
   paint_ops.c
   paint_stroke.c
   paint_utils.c
-  paint_vertex.c
+  paint_vertex.cc
   paint_vertex_color_ops.c
   paint_vertex_color_utils.c
   paint_vertex_proj.c
@@ -63,6 +72,7 @@ set(SRC
   sculpt_multiplane_scrape.c
   sculpt_ops.c
   sculpt_paint_color.c
+  sculpt_paint_image.cc
   sculpt_pose.c
   sculpt_smooth.c
   sculpt_transform.c
@@ -70,6 +80,7 @@ set(SRC
   sculpt_uv.c
 
   curves_sculpt_intern.h
+  curves_sculpt_intern.hh
   paint_intern.h
   sculpt_intern.h
 )
@@ -92,3 +103,6 @@ if(WITH_TBB)
 endif()
 
 blender_add_lib(bf_editor_sculpt_paint "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+# RNA_prototypes.h
+add_dependencies(bf_editor_sculpt_paint bf_rna)

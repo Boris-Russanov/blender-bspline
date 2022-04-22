@@ -96,6 +96,7 @@ static int wm_obj_export_exec(bContext *C, wmOperator *op)
   export_params.forward_axis = RNA_enum_get(op->ptr, "forward_axis");
   export_params.up_axis = RNA_enum_get(op->ptr, "up_axis");
   export_params.scaling_factor = RNA_float_get(op->ptr, "scaling_factor");
+  export_params.apply_modifiers = RNA_boolean_get(op->ptr, "apply_modifiers");
   export_params.export_eval_mode = RNA_enum_get(op->ptr, "export_eval_mode");
 
   export_params.export_selected_objects = RNA_boolean_get(op->ptr, "export_selected_objects");
@@ -147,6 +148,7 @@ static void ui_obj_export_settings(uiLayout *layout, PointerRNA *imfptr)
   uiItemR(sub, imfptr, "scaling_factor", 0, NULL, ICON_NONE);
   sub = uiLayoutColumnWithHeading(col, false, IFACE_("Objects"));
   uiItemR(sub, imfptr, "export_selected_objects", 0, IFACE_("Selected Only"), ICON_NONE);
+  uiItemR(sub, imfptr, "apply_modifiers", 0, IFACE_("Apply Modifiers"), ICON_NONE);
   uiItemR(sub, imfptr, "export_eval_mode", 0, IFACE_("Properties"), ICON_NONE);
 
   /* Options for what to write. */
@@ -239,6 +241,8 @@ void WM_OT_obj_export(struct wmOperatorType *ot)
   ot->ui = wm_obj_export_draw;
   ot->check = wm_obj_export_check;
 
+  ot->flag |= OPTYPE_PRESET;
+
   WM_operator_properties_filesel(ot,
                                  FILE_TYPE_FOLDER | FILE_TYPE_OBJECT_IO,
                                  FILE_BLENDER,
@@ -289,6 +293,8 @@ void WM_OT_obj_export(struct wmOperatorType *ot)
                 0.01,
                 1000.0f);
   /* File Writer options. */
+  RNA_def_boolean(
+      ot->srna, "apply_modifiers", true, "Apply Modifiers", "Apply modifiers to exported meshes");
   RNA_def_enum(ot->srna,
                "export_eval_mode",
                io_obj_export_evaluation_mode,
@@ -336,7 +342,7 @@ void WM_OT_obj_export(struct wmOperatorType *ot)
                   "export_material_groups",
                   false,
                   "Export Material Groups",
-                  "Append mesh name and material name to object name, separated by a '_'");
+                  "Generate an OBJ group for each part of a geometry using a different material");
   RNA_def_boolean(
       ot->srna,
       "export_vertex_groups",
@@ -352,4 +358,99 @@ void WM_OT_obj_export(struct wmOperatorType *ot)
       "Every smooth-shaded face is assigned group \"1\" and every flat-shaded face \"off\"");
   RNA_def_boolean(
       ot->srna, "smooth_group_bitflags", false, "Generate Bitflags for Smooth Groups", "");
+}
+
+static int wm_obj_import_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
+{
+  WM_event_add_fileselect(C, op);
+  return OPERATOR_RUNNING_MODAL;
+}
+
+static int wm_obj_import_exec(bContext *C, wmOperator *op)
+{
+  if (!RNA_struct_property_is_set(op->ptr, "filepath")) {
+    BKE_report(op->reports, RPT_ERROR, "No filename given");
+    return OPERATOR_CANCELLED;
+  }
+
+  struct OBJImportParams import_params;
+  RNA_string_get(op->ptr, "filepath", import_params.filepath);
+  import_params.clamp_size = RNA_float_get(op->ptr, "clamp_size");
+  import_params.forward_axis = RNA_enum_get(op->ptr, "forward_axis");
+  import_params.up_axis = RNA_enum_get(op->ptr, "up_axis");
+  import_params.validate_meshes = RNA_boolean_get(op->ptr, "validate_meshes");
+
+  OBJ_import(C, &import_params);
+
+  return OPERATOR_FINISHED;
+}
+
+static void ui_obj_import_settings(uiLayout *layout, PointerRNA *imfptr)
+{
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
+
+  uiLayout *box = uiLayoutBox(layout);
+  uiItemL(box, IFACE_("Transform"), ICON_OBJECT_DATA);
+  uiLayout *col = uiLayoutColumn(box, false);
+  uiLayout *sub = uiLayoutColumn(col, false);
+  uiItemR(sub, imfptr, "clamp_size", 0, NULL, ICON_NONE);
+  sub = uiLayoutColumn(col, false);
+  uiItemR(sub, imfptr, "forward_axis", 0, IFACE_("Axis Forward"), ICON_NONE);
+  uiItemR(sub, imfptr, "up_axis", 0, IFACE_("Up"), ICON_NONE);
+
+  box = uiLayoutBox(layout);
+  uiItemL(box, IFACE_("Options"), ICON_EXPORT);
+  col = uiLayoutColumn(box, false);
+  uiItemR(col, imfptr, "validate_meshes", 0, NULL, ICON_NONE);
+}
+
+static void wm_obj_import_draw(bContext *C, wmOperator *op)
+{
+  PointerRNA ptr;
+  wmWindowManager *wm = CTX_wm_manager(C);
+  RNA_pointer_create(&wm->id, op->type->srna, op->properties, &ptr);
+  ui_obj_import_settings(op->layout, &ptr);
+}
+
+void WM_OT_obj_import(struct wmOperatorType *ot)
+{
+  ot->name = "Import Wavefront OBJ";
+  ot->description = "Load a Wavefront OBJ scene";
+  ot->idname = "WM_OT_obj_import";
+
+  ot->invoke = wm_obj_import_invoke;
+  ot->exec = wm_obj_import_exec;
+  ot->poll = WM_operator_winactive;
+  ot->ui = wm_obj_import_draw;
+
+  WM_operator_properties_filesel(ot,
+                                 FILE_TYPE_FOLDER | FILE_TYPE_OBJECT_IO,
+                                 FILE_BLENDER,
+                                 FILE_OPENFILE,
+                                 WM_FILESEL_FILEPATH | WM_FILESEL_SHOW_PROPS,
+                                 FILE_DEFAULTDISPLAY,
+                                 FILE_SORT_ALPHA);
+  RNA_def_float(
+      ot->srna,
+      "clamp_size",
+      0.0f,
+      0.0f,
+      1000.0f,
+      "Clamp Bounding Box",
+      "Resize the objects to keep bounding box under this value. Value 0 diables clamping",
+      0.0f,
+      1000.0f);
+  RNA_def_enum(ot->srna,
+               "forward_axis",
+               io_obj_transform_axis_forward,
+               OBJ_AXIS_NEGATIVE_Z_FORWARD,
+               "Forward Axis",
+               "");
+  RNA_def_enum(ot->srna, "up_axis", io_obj_transform_axis_up, OBJ_AXIS_Y_UP, "Up Axis", "");
+  RNA_def_boolean(ot->srna,
+                  "validate_meshes",
+                  false,
+                  "Validate Meshes",
+                  "Check imported mesh objects for invalid data (slow)");
 }

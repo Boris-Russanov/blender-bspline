@@ -61,7 +61,7 @@ class NODE_HT_header(Header):
                 layout.separator_spacer()
 
                 types_that_support_material = {'MESH', 'CURVE', 'SURFACE', 'FONT', 'META',
-                                               'GPENCIL', 'VOLUME', 'HAIR', 'POINTCLOUD'}
+                                               'GPENCIL', 'VOLUME', 'CURVES', 'POINTCLOUD'}
                 # disable material slot buttons when pinned, cannot find correct slot within id_from (T36589)
                 # disable also when the selected object does not support materials
                 has_material_slots = not snode.pin and ob_type in types_that_support_material
@@ -149,7 +149,7 @@ class NODE_HT_header(Header):
                 active_modifier = ob.modifiers.active
                 if active_modifier and active_modifier.type == 'NODES':
                     if active_modifier.node_group:
-                        row.template_ID(active_modifier, "node_group", new="node.copy_geometry_node_group_assign")
+                        row.template_ID(active_modifier, "node_group", new="object.geometry_node_tree_copy_assign")
                     else:
                         row.template_ID(active_modifier, "node_group", new="node.new_geometry_node_group_assign")
                 else:
@@ -185,7 +185,7 @@ class NODE_HT_header(Header):
 
         # Snap
         row = layout.row(align=True)
-        row.prop(tool_settings, "use_snap", text="")
+        row.prop(tool_settings, "use_snap_node", text="")
         row.prop(tool_settings, "snap_node_element", icon_only=True)
         if tool_settings.snap_node_element != 'GRID':
             row.prop(tool_settings, "snap_target", text="")
@@ -709,6 +709,7 @@ class NODE_PT_overlay(Panel):
         if snode.tree_type == 'GeometryNodeTree':
             col.separator()
             col.prop(overlay, "show_timing", text="Timings")
+            col.prop(overlay, "show_named_attributes", text="Named Attributes")
 
 
 class NODE_UL_interface_sockets(bpy.types.UIList):
@@ -775,7 +776,7 @@ class NodeTreeInterfacePanel:
                 "node.tree_socket_change_type",
                 "socket_type",
                 text=active_socket.bl_label if active_socket.bl_label else active_socket.bl_idname
-                )
+            )
             props.in_out = in_out
 
             layout.use_property_split = True
@@ -814,6 +815,7 @@ class NODE_PT_node_tree_interface_inputs(NodeTreeInterfacePanel, Panel):
 
     def draw(self, context):
         self.draw_socket_list(context, "IN", "inputs", "active_input")
+
 
 class NODE_PT_node_tree_interface_outputs(NodeTreeInterfacePanel, Panel):
     bl_space_type = 'NODE_EDITOR'

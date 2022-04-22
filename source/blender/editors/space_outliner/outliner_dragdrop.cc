@@ -22,6 +22,7 @@
 #include "BKE_collection.h"
 #include "BKE_context.h"
 #include "BKE_layer.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_object.h"
@@ -46,7 +47,9 @@
 
 static Collection *collection_parent_from_ID(ID *id);
 
-/* ******************** Drop Target Find *********************** */
+/* -------------------------------------------------------------------- */
+/** \name Drop Target Find
+ * \{ */
 
 static TreeElement *outliner_dropzone_element(TreeElement *te,
                                               const float fmval[2],
@@ -254,7 +257,11 @@ static int outliner_get_insert_index(TreeElement *drag_te,
   return BLI_findindex(listbase, drop_te->directdata);
 }
 
-/* ******************** Parent Drop Operator *********************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Parent Drop Operator
+ * \{ */
 
 static bool parent_drop_allowed(TreeElement *te, Object *potential_child)
 {
@@ -368,7 +375,7 @@ static void parent_drop_set_parents(bContext *C,
       Object *object = (Object *)drag_id->id;
 
       /* Do nothing to linked data */
-      if (ID_IS_LINKED(object)) {
+      if (!BKE_id_is_editable(bmain, &object->id)) {
         linked_objects = true;
         continue;
       }
@@ -381,7 +388,7 @@ static void parent_drop_set_parents(bContext *C,
   }
 
   if (linked_objects) {
-    BKE_report(reports, RPT_INFO, "Can't edit library linked object(s)");
+    BKE_report(reports, RPT_INFO, "Can't edit library linked or non-editable override object(s)");
   }
 
   if (parent_set) {
@@ -443,7 +450,11 @@ void OUTLINER_OT_parent_drop(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
 
-/* ******************** Parent Clear Operator *********************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Parent Clear Operator
+ * \{ */
 
 static bool parent_clear_poll(bContext *C, wmDrag *drag, const wmEvent *event)
 {
@@ -527,7 +538,11 @@ void OUTLINER_OT_parent_clear(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
 
-/* ******************** Scene Drop Operator *********************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Scene Drop Operator
+ * \{ */
 
 static bool scene_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event)
 {
@@ -542,7 +557,7 @@ static int scene_drop_invoke(bContext *C, wmOperator *UNUSED(op), const wmEvent 
   Scene *scene = (Scene *)outliner_ID_drop_find(C, event, ID_SCE);
   Object *ob = (Object *)WM_drag_get_local_ID_from_event(event, ID_OB);
 
-  if (ELEM(nullptr, ob, scene) || ID_IS_LINKED(scene)) {
+  if (ELEM(nullptr, ob, scene) || !BKE_id_is_editable(bmain, &scene->id)) {
     return OPERATOR_CANCELLED;
   }
 
@@ -592,7 +607,11 @@ void OUTLINER_OT_scene_drop(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
 
-/* ******************** Material Drop Operator *********************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Material Drop Operator
+ * \{ */
 
 static bool material_drop_poll(bContext *C, wmDrag *drag, const wmEvent *event)
 {
@@ -641,15 +660,19 @@ void OUTLINER_OT_material_drop(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
 
-/* ******************** Data Stack Drop Operator *********************** */
+/** \} */
 
-/* A generic operator to allow drag and drop for modifiers, constraints,
+/* -------------------------------------------------------------------- */
+/** \name Data Stack Drop Operator
+ *
+ * A generic operator to allow drag and drop for modifiers, constraints,
  * and shader effects which all share the same UI stack layout.
  *
  * The following operations are allowed:
  * - Reordering within an object.
  * - Copying a single modifier/constraint/effect to another object.
- * - Copying (linking) an object's modifiers/constraints/effects to another. */
+ * - Copying (linking) an object's modifiers/constraints/effects to another.
+ * \{ */
 
 enum eDataStackDropAction {
   DATA_STACK_DROP_REORDER,
@@ -726,7 +749,7 @@ static bool datastack_drop_init(bContext *C, const wmEvent *event, StackDropData
     ob = nullptr;
   }
 
-  if (ob && ID_IS_LINKED(&ob->id)) {
+  if (ob && !BKE_id_is_editable(CTX_data_main(C), &ob->id)) {
     return false;
   }
 
@@ -1069,7 +1092,11 @@ void OUTLINER_OT_datastack_drop(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
 
-/* ******************** Collection Drop Operator *********************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Collection Drop Operator
+ * \{ */
 
 struct CollectionDrop {
   Collection *from;
@@ -1081,8 +1108,8 @@ struct CollectionDrop {
 
 static Collection *collection_parent_from_ID(ID *id)
 {
-  /* Can't change linked parent collections. */
-  if (!id || ID_IS_LINKED(id)) {
+  /* Can't change linked or override parent collections. */
+  if (!id || ID_IS_LINKED(id) || ID_IS_OVERRIDE_LIBRARY(id)) {
     return nullptr;
   }
 
@@ -1108,7 +1135,7 @@ static bool collection_drop_init(
   }
 
   Collection *to_collection = outliner_collection_from_tree_element(te);
-  if (ID_IS_LINKED(to_collection)) {
+  if (ID_IS_LINKED(to_collection) || ID_IS_OVERRIDE_LIBRARY(to_collection)) {
     return false;
   }
 
@@ -1350,7 +1377,11 @@ void OUTLINER_OT_collection_drop(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
 
-/* ********************* Outliner Drag Operator ******************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Outliner Drag Operator
+ * \{ */
 
 #define OUTLINER_DRAG_SCOLL_OUTSIDE_PAD 7 /* In UI units */
 
@@ -1404,7 +1435,7 @@ static int outliner_item_drag_drop_invoke(bContext *C,
     PointerRNA op_ptr;
     WM_operator_properties_create_ptr(&op_ptr, ot);
     RNA_float_set(&op_ptr, "outside_padding", OUTLINER_DRAG_SCOLL_OUTSIDE_PAD);
-    WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &op_ptr);
+    WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &op_ptr, event);
     WM_operator_properties_free(&op_ptr);
   }
 
@@ -1528,7 +1559,11 @@ void OUTLINER_OT_item_drag_drop(wmOperatorType *ot)
 
 #undef OUTLINER_DRAG_SCOLL_OUTSIDE_PAD
 
-/* *************************** Drop Boxes ************************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Drop Boxes
+ * \{ */
 
 void outliner_dropboxes(void)
 {
@@ -1551,3 +1586,5 @@ void outliner_dropboxes(void)
                  nullptr,
                  collection_drop_tooltip);
 }
+
+/** \} */

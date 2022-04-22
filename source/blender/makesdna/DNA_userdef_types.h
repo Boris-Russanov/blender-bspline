@@ -637,7 +637,6 @@ typedef struct UserDef_Experimental {
   char use_undo_legacy;
   char no_override_auto_resync;
   char use_cycles_debug;
-  char use_geometry_nodes_legacy;
   char show_asset_debug_info;
   char no_asset_indexing;
   char SANITIZE_AFTER_HERE;
@@ -646,11 +645,13 @@ typedef struct UserDef_Experimental {
   char use_new_curves_type;
   char use_new_point_cloud_type;
   char use_full_frame_compositor;
-  char use_sculpt_vertex_colors;
   char use_sculpt_tools_tilt;
   char use_extended_asset_browser;
   char use_override_templates;
-  char _pad[2];
+  char use_named_attribute_nodes;
+  char enable_eevee_next;
+  char use_sculpt_texture_paint;
+  char _pad0[1];
   /** `makesdna` does not allow empty structs. */
 } UserDef_Experimental;
 

@@ -1156,36 +1156,39 @@ typedef struct wmDrag {
 } wmDrag;
 
 /**
- * Dropboxes are like keymaps, part of the screen/area/region definition.
+ * Drop-boxes are like key-maps, part of the screen/area/region definition.
  * Allocation and free is on startup and exit.
  *
  * The operator is polled and invoked with the current context (#WM_OP_INVOKE_DEFAULT), there is no
- * way to override that (by design, since dropboxes should act on the exact mouse position). So the
- * drop-boxes are supposed to check the required area and region context in their poll.
+ * way to override that (by design, since drop-boxes should act on the exact mouse position).
+ * So the drop-boxes are supposed to check the required area and region context in their poll.
  */
 typedef struct wmDropBox {
   struct wmDropBox *next, *prev;
 
   /** Test if the dropbox is active. */
-  bool (*poll)(struct bContext *, struct wmDrag *, const wmEvent *);
+  bool (*poll)(struct bContext *C, struct wmDrag *drag, const wmEvent *event);
 
   /** Before exec, this copies drag info to #wmDrop properties. */
-  void (*copy)(struct wmDrag *, struct wmDropBox *);
+  void (*copy)(struct wmDrag *drag, struct wmDropBox *drop);
 
   /**
-   * If the operator is cancelled (returns `OPERATOR_CANCELLED`), this can be used for cleanup of
+   * If the operator is canceled (returns `OPERATOR_CANCELLED`), this can be used for cleanup of
    * `copy()` resources.
    */
-  void (*cancel)(struct Main *, struct wmDrag *, struct wmDropBox *);
+  void (*cancel)(struct Main *bmain, struct wmDrag *drag, struct wmDropBox *drop);
 
-  /** Override the default drawing function. */
-  void (*draw)(struct bContext *, struct wmWindow *, struct wmDrag *, const int *);
+  /**
+   * Override the default drawing function.
+   * \param xy: Cursor location in window coordinates (#wmEvent.xy compatible).
+   */
+  void (*draw)(struct bContext *C, struct wmWindow *win, struct wmDrag *drag, const int xy[2]);
 
   /** Called when pool returns true the first time. */
-  void (*draw_activate)(struct wmDropBox *, struct wmDrag *drag);
+  void (*draw_activate)(struct wmDropBox *drop, struct wmDrag *drag);
 
   /** Called when pool returns false the first time or when the drag event ends. */
-  void (*draw_deactivate)(struct wmDropBox *, struct wmDrag *drag);
+  void (*draw_deactivate)(struct wmDropBox *drop, struct wmDrag *drag);
 
   /** Custom data for drawing. */
   void *draw_data;
@@ -1242,6 +1245,7 @@ typedef struct RecentFile {
 /* Logging */
 struct CLG_LogRef;
 /* wm_init_exit.c */
+
 extern struct CLG_LogRef *WM_LOG_OPERATORS;
 extern struct CLG_LogRef *WM_LOG_HANDLERS;
 extern struct CLG_LogRef *WM_LOG_EVENTS;

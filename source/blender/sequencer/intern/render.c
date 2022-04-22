@@ -45,10 +45,12 @@
 #include "IMB_metadata.h"
 
 #include "RNA_access.h"
+#include "RNA_prototypes.h"
 
 #include "RE_engine.h"
 #include "RE_pipeline.h"
 
+#include "SEQ_channels.h"
 #include "SEQ_effects.h"
 #include "SEQ_iterator.h"
 #include "SEQ_modifier.h"
@@ -71,6 +73,7 @@
 
 static ImBuf *seq_render_strip_stack(const SeqRenderData *context,
                                      SeqRenderState *state,
+                                     ListBase *channels,
                                      ListBase *seqbasep,
                                      float timeline_frame,
                                      int chanshown);
@@ -255,12 +258,14 @@ static int seq_channel_cmp_fn(const void *a, const void *b)
   return (*(Sequence **)a)->machine - (*(Sequence **)b)->machine;
 }
 
-int seq_get_shown_sequences(ListBase *seqbase,
+int seq_get_shown_sequences(ListBase *channels,
+                            ListBase *seqbase,
                             const int timeline_frame,
                             const int chanshown,
                             Sequence **r_seq_arr)
 {
-  SeqCollection *collection = SEQ_query_rendered_strips(seqbase, timeline_frame, chanshown);
+  SeqCollection *collection = SEQ_query_rendered_strips(
+      channels, seqbase, timeline_frame, chanshown);
   const int strip_count = BLI_gset_len(collection->set);
 
   if (strip_count > MAXSEQ) {
@@ -1500,7 +1505,7 @@ static ImBuf *seq_render_scene_strip(const SeqRenderData *context,
       }
 
       RE_RenderFrame(
-          re, context->bmain, scene, have_comp ? NULL : view_layer, camera, frame, false);
+          re, context->bmain, scene, have_comp ? NULL : view_layer, camera, frame, 0.0f, false);
 
       /* restore previous state after it was toggled on & off by RE_RenderFrame */
       G.is_rendering = is_rendering;
@@ -1581,6 +1586,7 @@ static ImBuf *do_render_strip_seqbase(const SeqRenderData *context,
 {
   ImBuf *ibuf = NULL;
   ListBase *seqbase = NULL;
+  ListBase *channels = &seq->channels;
   int offset;
 
   seqbase = SEQ_get_seqbase_from_sequence(seq, &offset);
@@ -1593,6 +1599,7 @@ static ImBuf *do_render_strip_seqbase(const SeqRenderData *context,
 
     ibuf = seq_render_strip_stack(context,
                                   state,
+                                  channels,
                                   seqbase,
                                   /* scene strips don't have their start taken into account */
                                   frame_index + offset,
@@ -1808,6 +1815,7 @@ static ImBuf *seq_render_strip_stack_apply_effect(
 
 static ImBuf *seq_render_strip_stack(const SeqRenderData *context,
                                      SeqRenderState *state,
+                                     ListBase *channels,
                                      ListBase *seqbasep,
                                      float timeline_frame,
                                      int chanshown)
@@ -1817,7 +1825,8 @@ static ImBuf *seq_render_strip_stack(const SeqRenderData *context,
   int i;
   ImBuf *out = NULL;
 
-  count = seq_get_shown_sequences(seqbasep, timeline_frame, chanshown, (Sequence **)&seq_arr);
+  count = seq_get_shown_sequences(
+      channels, seqbasep, timeline_frame, chanshown, (Sequence **)&seq_arr);
 
   if (count == 0) {
     return NULL;
@@ -1908,6 +1917,7 @@ ImBuf *SEQ_render_give_ibuf(const SeqRenderData *context, float timeline_frame, 
   Scene *scene = context->scene;
   Editing *ed = SEQ_editing_get(scene);
   ListBase *seqbasep;
+  ListBase *channels;
 
   if (ed == NULL) {
     return NULL;
@@ -1917,9 +1927,11 @@ ImBuf *SEQ_render_give_ibuf(const SeqRenderData *context, float timeline_frame, 
     int count = BLI_listbase_count(&ed->metastack);
     count = max_ii(count + chanshown, 0);
     seqbasep = ((MetaStack *)BLI_findlink(&ed->metastack, count))->oldbasep;
+    channels = ((MetaStack *)BLI_findlink(&ed->metastack, count))->old_channels;
   }
   else {
     seqbasep = ed->seqbasep;
+    channels = ed->displayed_channels;
   }
 
   SeqRenderState state;
@@ -1928,7 +1940,7 @@ ImBuf *SEQ_render_give_ibuf(const SeqRenderData *context, float timeline_frame, 
   Sequence *seq_arr[MAXSEQ + 1];
   int count;
 
-  count = seq_get_shown_sequences(seqbasep, timeline_frame, chanshown, seq_arr);
+  count = seq_get_shown_sequences(channels, seqbasep, timeline_frame, chanshown, seq_arr);
 
   if (count) {
     out = seq_cache_get(context, seq_arr[count - 1], timeline_frame, SEQ_CACHE_STORE_FINAL_OUT);
@@ -1940,7 +1952,7 @@ ImBuf *SEQ_render_give_ibuf(const SeqRenderData *context, float timeline_frame, 
 
   if (count && !out) {
     BLI_mutex_lock(&seq_render_mutex);
-    out = seq_render_strip_stack(context, &state, seqbasep, timeline_frame, chanshown);
+    out = seq_render_strip_stack(context, &state, channels, seqbasep, timeline_frame, chanshown);
 
     if (context->is_prefetch_render) {
       seq_cache_put(context, seq_arr[count - 1], timeline_frame, SEQ_CACHE_STORE_FINAL_OUT, out);
@@ -1960,12 +1972,13 @@ ImBuf *SEQ_render_give_ibuf(const SeqRenderData *context, float timeline_frame, 
 ImBuf *seq_render_give_ibuf_seqbase(const SeqRenderData *context,
                                     float timeline_frame,
                                     int chan_shown,
+                                    ListBase *channels,
                                     ListBase *seqbasep)
 {
   SeqRenderState state;
   seq_render_state_init(&state);
 
-  return seq_render_strip_stack(context, &state, seqbasep, timeline_frame, chan_shown);
+  return seq_render_strip_stack(context, &state, channels, seqbasep, timeline_frame, chan_shown);
 }
 
 ImBuf *SEQ_render_give_ibuf_direct(const SeqRenderData *context,
@@ -2132,6 +2145,13 @@ void SEQ_render_thumbnails_base_set(const SeqRenderData *context,
 
     timeline_frame += frame_step;
   }
+}
+
+bool SEQ_render_is_muted(const ListBase *channels, const Sequence *seq)
+{
+
+  SeqTimelineChannel *channel = SEQ_channel_get_by_index(channels, seq->machine);
+  return seq->flag & SEQ_MUTE || SEQ_channel_is_muted(channel);
 }
 
 /** \} */

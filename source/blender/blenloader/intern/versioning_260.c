@@ -357,7 +357,7 @@ static void do_versions_mesh_mloopcol_swap_2_62_1(Mesh *me)
   for (a = 0; a < me->ldata.totlayer; a++) {
     layer = &me->ldata.layers[a];
 
-    if (layer->type == CD_MLOOPCOL) {
+    if (layer->type == CD_PROP_BYTE_COLOR) {
       mloopcol = (MLoopCol *)layer->data;
       for (i = 0; i < me->totloop; i++, mloopcol++) {
         SWAP(uchar, mloopcol->r, mloopcol->b);
@@ -1838,7 +1838,7 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
         Image *image = blo_do_versions_newlibadr(fd, tex->id.lib, tex->ima);
 
         if (image && (image->flag & IMA_DO_PREMUL) == 0) {
-          const int IMA_IGNORE_ALPHA = (1 << 12);
+          enum { IMA_IGNORE_ALPHA = (1 << 12) };
           image->flag |= IMA_IGNORE_ALPHA;
         }
       }

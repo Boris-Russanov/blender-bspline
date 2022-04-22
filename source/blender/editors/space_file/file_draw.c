@@ -38,6 +38,7 @@
 #include "DNA_windowmanager_types.h"
 
 #include "RNA_access.h"
+#include "RNA_prototypes.h"
 
 #include "ED_fileselect.h"
 #include "ED_screen.h"
@@ -247,7 +248,7 @@ static void file_draw_string_multiline(int sx,
   int font_id = style->widgetlabel.uifont_id;
   int len = strlen(string);
 
-  rctf textbox;
+  rcti textbox;
   BLF_wordwrap(font_id, wrap_width);
   BLF_enable(font_id, BLF_WORD_WRAP);
   BLF_boundbox(font_id, string, len, &textbox);
@@ -259,7 +260,7 @@ static void file_draw_string_multiline(int sx,
   rect.xmax = sx + wrap_width;
   /* Need to increase the clipping rect by one more line, since the #UI_fontstyle_draw_ex() will
    * actually start drawing at (ymax - line-height). */
-  rect.ymin = sy - round_fl_to_int(BLI_rctf_size_y(&textbox)) - line_height;
+  rect.ymin = sy - BLI_rcti_size_y(&textbox) - line_height;
   rect.ymax = sy;
 
   struct ResultBLF result;

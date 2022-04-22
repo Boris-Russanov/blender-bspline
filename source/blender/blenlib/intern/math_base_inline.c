@@ -95,10 +95,10 @@ MINLINE float saacos(float fac)
 MINLINE float saasin(float fac)
 {
   if (UNLIKELY(fac <= -1.0f)) {
-    return (float)-M_PI / 2.0f;
+    return (float)-M_PI_2;
   }
   else if (UNLIKELY(fac >= 1.0f)) {
-    return (float)M_PI / 2.0f;
+    return (float)M_PI_2;
   }
   else {
     return asinf(fac);
@@ -131,10 +131,10 @@ MINLINE float saacosf(float fac)
 MINLINE float saasinf(float fac)
 {
   if (UNLIKELY(fac <= -1.0f)) {
-    return (float)-M_PI / 2.0f;
+    return (float)-M_PI_2;
   }
   else if (UNLIKELY(fac >= 1.0f)) {
-    return (float)M_PI / 2.0f;
+    return (float)M_PI_2;
   }
   else {
     return asinf(fac);
@@ -520,6 +520,15 @@ MINLINE uint min_uu(uint a, uint b)
   return (a < b) ? a : b;
 }
 MINLINE uint max_uu(uint a, uint b)
+{
+  return (b < a) ? a : b;
+}
+
+MINLINE unsigned long long min_ulul(unsigned long long a, unsigned long long b)
+{
+  return (a < b) ? a : b;
+}
+MINLINE unsigned long long max_ulul(unsigned long long a, unsigned long long b)
 {
   return (b < a) ? a : b;
 }

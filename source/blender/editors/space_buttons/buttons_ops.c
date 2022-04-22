@@ -31,6 +31,7 @@
 #include "ED_undo.h"
 
 #include "RNA_access.h"
+#include "RNA_prototypes.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -206,13 +207,13 @@ static int file_browse_exec(bContext *C, wmOperator *op)
       /* Do this first so '//' isn't converted to '//\' on windows. */
       BLI_path_slash_ensure(path);
       if (is_relative) {
-        const int path_len = BLI_strncpy_rlen(path, str, FILE_MAX);
         BLI_path_rel(path, BKE_main_blendfile_path(bmain));
-        str = MEM_reallocN(str, path_len + 2);
-        BLI_strncpy(str, path, FILE_MAX);
+        str_len = strlen(path);
+        str = MEM_reallocN(str, str_len + 1);
+        memcpy(str, path, str_len + 1);
       }
       else {
-        str = MEM_reallocN(str, str_len + 2);
+        str = MEM_reallocN(str, str_len + 1);
       }
     }
     else {
@@ -295,7 +296,7 @@ static int file_browse_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
     WM_operator_properties_create_ptr(&props_ptr, ot);
     RNA_string_set(&props_ptr, "filepath", str);
-    WM_operator_name_call_ptr(C, ot, WM_OP_EXEC_DEFAULT, &props_ptr);
+    WM_operator_name_call_ptr(C, ot, WM_OP_EXEC_DEFAULT, &props_ptr, NULL);
     WM_operator_properties_free(&props_ptr);
 
     MEM_freeN(str);

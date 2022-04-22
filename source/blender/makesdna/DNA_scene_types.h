@@ -429,8 +429,11 @@ typedef struct ImageFormatData {
   Stereo3dFormat stereo3d_format;
 
   /* color management */
+  char color_management;
+  char _pad1[7];
   ColorManagedViewSettings view_settings;
   ColorManagedDisplaySettings display_settings;
+  ColorManagedColorspaceSettings linear_colorspace_settings;
 } ImageFormatData;
 
 /** #ImageFormatData.imtype */
@@ -462,12 +465,13 @@ typedef struct ImageFormatData {
 #define R_IMF_IMTYPE_XVID 32
 #define R_IMF_IMTYPE_THEORA 33
 #define R_IMF_IMTYPE_PSD 34
+#define R_IMF_IMTYPE_WEBP 35
 
 #define R_IMF_IMTYPE_INVALID 255
 
 /** #ImageFormatData.flag */
-#define R_IMF_FLAG_ZBUF (1 << 0)        /* was R_OPENEXR_ZBUF */
-#define R_IMF_FLAG_PREVIEW_JPG (1 << 1) /* was R_PREVIEW_JPG */
+#define R_IMF_FLAG_ZBUF (1 << 0)
+#define R_IMF_FLAG_PREVIEW_JPG (1 << 1)
 
 /* Return values from #BKE_imtype_valid_depths, note this is depths per channel. */
 /** #ImageFormatData.depth */
@@ -525,6 +529,10 @@ enum {
   R_IMF_TIFF_CODEC_PACKBITS = 2,
   R_IMF_TIFF_CODEC_NONE = 3,
 };
+
+/** #ImageFormatData.color_management */
+#define R_IMF_COLOR_MANAGEMENT_FOLLOW_SCENE 0
+#define R_IMF_COLOR_MANAGEMENT_OVERRIDE 1
 
 typedef struct BakeData {
   struct ImageFormatData im_format;
@@ -922,6 +930,20 @@ typedef struct ImagePaintSettings {
 } ImagePaintSettings;
 
 /* ------------------------------------------- */
+/* Paint mode settings */
+
+typedef struct PaintModeSettings {
+  /** Source to select canvas from to paint on (ePaintCanvasSource) */
+  char canvas_source;
+  char _pad[7];
+
+  /** Selected image when canvas_source=PAINT_CANVAS_SOURCE_IMAGE. */
+  Image *canvas_image;
+  ImageUser image_user;
+
+} PaintModeSettings;
+
+/* ------------------------------------------- */
 /* Particle Edit */
 
 /** Settings for a Particle Editing Brush. */
@@ -994,9 +1016,6 @@ typedef struct Sculpt {
 
 typedef struct CurvesSculpt {
   Paint paint;
-  /** Minimum distance between newly added curves on a surface. */
-  float distance;
-  char _pad1[4];
 } CurvesSculpt;
 
 typedef struct UvSculpt {
@@ -1093,7 +1112,7 @@ typedef struct GP_Sculpt_Settings {
   /** Threshold for intersections */
   float isect_threshold;
   char _pad[4];
-  /** Multiframe edit falloff effect by frame. */
+  /** Multi-frame edit falloff effect by frame. */
   struct CurveMapping *cur_falloff;
   /** Curve used for primitive tools. */
   struct CurveMapping *cur_primitive;
@@ -1442,6 +1461,9 @@ typedef struct ToolSettings {
   /* Image Paint (8 bytes aligned please!) */
   struct ImagePaintSettings imapaint;
 
+  /** Settings for paint mode. */
+  struct PaintModeSettings paint_mode;
+
   /* Particle Editing */
   struct ParticleEditSettings particle;
 
@@ -1469,13 +1491,18 @@ typedef struct ToolSettings {
   /* Transform */
   char transform_pivot_point;
   char transform_flag;
+  /** Snap elements (per spacetype). */
   char snap_mode;
   char snap_node_mode;
   char snap_uv_mode;
+  /** Generic flags (per spacetype). */
   char snap_flag;
-  /** UV equivalent of `snap_flag`, limited to: #SCE_SNAP_ABS_GRID. */
+  char snap_flag_node;
+  char snap_flag_seq;
   char snap_uv_flag;
+  /** Default snap source. */
   char snap_target;
+  /** Snap mask for transform modes. */
   char snap_transform_mode_flag;
 
   char proportional_edit, prop_mode;
@@ -1505,16 +1532,14 @@ typedef struct ToolSettings {
   char gpencil_selectmode_vertex;
 
   /* UV painting */
-  char _pad2[1];
   char uv_sculpt_settings;
   char uv_relax_method;
-  /* XXX: these sculpt_paint_* fields are deprecated, use the
-   * unified_paint_settings field instead! */
-  short sculpt_paint_settings DNA_DEPRECATED;
 
   char workspace_tool_type;
 
-  char _pad5[1];
+  /* XXX: these sculpt_paint_* fields are deprecated, use the
+   * unified_paint_settings field instead! */
+  short sculpt_paint_settings DNA_DEPRECATED;
   int sculpt_paint_unified_size DNA_DEPRECATED;
   float sculpt_paint_unified_unprojected_radius DNA_DEPRECATED;
   float sculpt_paint_unified_alpha DNA_DEPRECATED;
@@ -1967,7 +1992,7 @@ enum {
 
 /* sequencer seq_prev_type seq_rend_type */
 
-/** #RenderData.engine (scene.c) */
+/** #RenderData.engine (scene.cc) */
 extern const char *RE_engine_id_BLENDER_EEVEE;
 extern const char *RE_engine_id_BLENDER_WORKBENCH;
 extern const char *RE_engine_id_CYCLES;
@@ -1994,7 +2019,10 @@ extern const char *RE_engine_id_CYCLES;
    ((v3d == NULL) || (((1 << (base)->object->type) & (v3d)->object_type_exclude_select) == 0)) && \
    (((base)->flag & BASE_SELECTABLE) != 0))
 #define BASE_SELECTED(v3d, base) (BASE_VISIBLE(v3d, base) && (((base)->flag & BASE_SELECTED) != 0))
-#define BASE_EDITABLE(v3d, base) (BASE_VISIBLE(v3d, base) && !ID_IS_LINKED((base)->object))
+#define BASE_EDITABLE(v3d, base) \
+  (BASE_VISIBLE(v3d, base) && !ID_IS_LINKED((base)->object) && \
+   (!ID_IS_OVERRIDE_LIBRARY_REAL((base)->object) || \
+    ((base)->object->id.override_library->flag & IDOVERRIDE_LIBRARY_FLAG_SYSTEM_DEFINED) == 0))
 #define BASE_SELECTED_EDITABLE(v3d, base) \
   (BASE_EDITABLE(v3d, base) && (((base)->flag & BASE_SELECTED) != 0))
 
@@ -2055,7 +2083,6 @@ enum {
 #define SCE_SNAP_NO_SELF (1 << 4)
 #define SCE_SNAP_ABS_GRID (1 << 5)
 #define SCE_SNAP_BACKFACE_CULLING (1 << 6)
-#define SCE_SNAP_SEQ (1 << 7)
 
 /** #ToolSettings.snap_target */
 #define SCE_SNAP_TARGET_CLOSEST 0
@@ -2144,6 +2171,7 @@ enum {
 };
 
 /* object_vgroup.c */
+
 /** #ToolSettings.vgroupsubset */
 typedef enum eVGroupSelect {
   WT_VGROUP_ALL = 0,
@@ -2252,11 +2280,21 @@ typedef enum eSculptFlags {
   SCULPT_HIDE_FACE_SETS = (1 << 17),
 } eSculptFlags;
 
+/** PaintModeSettings.mode */
+typedef enum ePaintCanvasSource {
+  /** Paint on the active node of the active material slot. */
+  PAINT_CANVAS_SOURCE_MATERIAL = 0,
+  /** Paint on a selected image. */
+  PAINT_CANVAS_SOURCE_IMAGE = 1,
+  /** Paint on the active color attribute (vertex color) layer. */
+  PAINT_CANVAS_SOURCE_COLOR_ATTRIBUTE = 2,
+} ePaintCanvasSource;
+
 /** #ImagePaintSettings.mode */
-typedef enum eImagePaintMode {
-  IMAGEPAINT_MODE_MATERIAL = 0, /* detect texture paint slots from the material */
-  IMAGEPAINT_MODE_IMAGE = 1,    /* select texture paint image directly */
-} eImagePaintMode;
+/* Defines to let old texture painting use the new enum. */
+/* TODO(jbakker): rename usages. */
+#define IMAGEPAINT_MODE_MATERIAL PAINT_CANVAS_SOURCE_MATERIAL
+#define IMAGEPAINT_MODE_IMAGE PAINT_CANVAS_SOURCE_IMAGE
 
 /** #ImagePaintSettings.interp */
 enum {
@@ -2421,11 +2459,11 @@ typedef enum eGPencil_Guide_Reference {
 /* UnitSettings */
 
 #define USER_UNIT_ADAPTIVE 0xFF
-/* UnitSettings.system */
+/** #UnitSettings.system */
 #define USER_UNIT_NONE 0
 #define USER_UNIT_METRIC 1
 #define USER_UNIT_IMPERIAL 2
-/* UnitSettings.flag */
+/** #UnitSettings.flag */
 #define USER_UNIT_OPT_SPLIT 1
 #define USER_UNIT_ROT_RADIANS 2
 

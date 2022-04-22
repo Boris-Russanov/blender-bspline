@@ -17,8 +17,8 @@
 #include "BLI_index_range.hh"
 #include "BLI_math.h"
 #include "BLI_math_vec_types.hh"
+#include "BLI_string.h"
 #include "BLI_utildefines.h"
-
 #include "BLT_translation.h"
 
 /* Allow using deprecated functionality for .blend file I/O. */
@@ -61,6 +61,14 @@ using blender::IndexRange;
 
 /* local */
 // static CLG_LogRef LOG = {"bke.curve"};
+
+enum class NURBSValidationStatus {
+  Valid,
+  AtLeastTwoPointsRequired,
+  MorePointsThanOrderRequired,
+  MoreRowsForBezierRequired,
+  MorePointsForBezierRequired
+};
 
 static void curve_init_data(ID *id)
 {
@@ -115,8 +123,6 @@ static void curve_free_data(ID *id)
   MEM_SAFE_FREE(curve->str);
   MEM_SAFE_FREE(curve->strinfo);
   MEM_SAFE_FREE(curve->tb);
-
-  delete curve->curve_eval;
 }
 
 static void curve_foreach_id(ID *id, LibraryForeachIDData *data)
@@ -659,7 +665,7 @@ Nurb *BKE_nurb_duplicate(const Nurb *nu)
   if (newnu == nullptr) {
     return nullptr;
   }
-  memcpy(newnu, nu, sizeof(Nurb));
+  *newnu = blender::dna::shallow_copy(*nu);
 
   if (nu->bezt) {
     newnu->bezt = (BezTriple *)MEM_malloc_arrayN(nu->pntsu, sizeof(BezTriple), "duplicateNurb2");
@@ -693,7 +699,7 @@ Nurb *BKE_nurb_duplicate(const Nurb *nu)
 Nurb *BKE_nurb_copy(Nurb *src, int pntsu, int pntsv)
 {
   Nurb *newnu = (Nurb *)MEM_mallocN(sizeof(Nurb), "copyNurb");
-  memcpy(newnu, src, sizeof(Nurb));
+  *newnu = blender::dna::shallow_copy(*src);
 
   if (pntsu == 1) {
     SWAP(int, pntsu, pntsv);
@@ -1156,12 +1162,13 @@ void BKE_nurb_bpoint_calc_plane(struct Nurb *nu, BPoint *bp, float r_plane[3])
 static void calcknots(float *knots, const int pnts, const short order, const short flag)
 {
   const bool is_cyclic = flag & CU_NURB_CYCLIC;
-  const bool is_bezier = flag & CU_NURB_BEZIER && !(flag & CU_NURB_ENDPOINT);
-  const bool is_end_point = flag & CU_NURB_ENDPOINT && !(flag & CU_NURB_BEZIER);
+  const bool is_bezier = flag & CU_NURB_BEZIER;
+  const bool is_end_point = flag & CU_NURB_ENDPOINT;
   /* Inner knots are always repeated once except on Bezier case. */
   const int repeat_inner = is_bezier ? order - 1 : 1;
   /* How many times to repeat 0.0 at the beginning of knot. */
-  const int head = is_end_point && !is_cyclic ? order : (is_bezier ? order / 2 : 1);
+  const int head = is_end_point ? (order - (is_cyclic ? 1 : 0)) :
+                                  (is_bezier ? min_ii(2, repeat_inner) : 1);
   /* Number of knots replicating widths of the starting knots.
    * Covers both Cyclic and EndPoint cases. */
   const int tail = is_cyclic ? 2 * order - 1 : (is_end_point ? order : 0);
@@ -1171,11 +1178,17 @@ static void calcknots(float *knots, const int pnts, const short order, const sho
   int r = head;
   float current = 0.0f;
 
-  for (const int i : IndexRange(knot_count - tail)) {
+  const int offset = is_end_point && is_cyclic ? 1 : 0;
+  if (offset) {
+    knots[0] = current;
+    current += 1.0f;
+  }
+
+  for (const int i : IndexRange(offset, knot_count - offset - tail)) {
     knots[i] = current;
     r--;
     if (r == 0) {
-      current += 1.0;
+      current += 1.0f;
       r = repeat_inner;
     }
   }
@@ -3169,7 +3182,7 @@ static void calchandleNurb_intern(BezTriple *bezt,
     len *= 2.5614f;
 
     if (len != 0.0f) {
-      /* only for fcurves */
+      /* Only for F-Curves. */
       bool leftviolate = false, rightviolate = false;
 
       if (!is_fcurve || fcurve_smoothing == FCURVE_SMOOTH_NONE) {
@@ -4693,59 +4706,94 @@ void BKE_curve_nurbs_key_vert_tilts_apply(ListBase *lb, const float *key)
   }
 }
 
-bool BKE_nurb_check_valid_u(const Nurb *nu)
+static NURBSValidationStatus nurb_check_valid(const int pnts,
+                                              const short order,
+                                              const short flag,
+                                              const short type,
+                                              const bool is_surf,
+                                              int *r_points_needed)
 {
-  if (nu->pntsu <= 1) {
-    return false;
+  if (pnts <= 1) {
+    return NURBSValidationStatus::AtLeastTwoPointsRequired;
   }
-  if (nu->type != CU_NURBS) {
-    return true; /* not a nurb, lets assume its valid */
+  if (type == CU_NURBS) {
+    if (pnts < order) {
+      return NURBSValidationStatus::MorePointsThanOrderRequired;
+    }
+    if (flag & CU_NURB_BEZIER) {
+      int points_needed = 0;
+      if (flag & CU_NURB_CYCLIC) {
+        const int remainder = pnts % (order - 1);
+        points_needed = remainder > 0 ? order - 1 - remainder : 0;
+      }
+      else if (((flag & CU_NURB_ENDPOINT) == 0) && pnts <= order) {
+        points_needed = order + 1 - pnts;
+      }
+      if (points_needed) {
+        *r_points_needed = points_needed;
+        return is_surf ? NURBSValidationStatus::MoreRowsForBezierRequired :
+                         NURBSValidationStatus::MorePointsForBezierRequired;
+      }
+    }
+  }
+  return NURBSValidationStatus::Valid;
+}
+
+bool BKE_nurb_valid_message(const int pnts,
+                            const short order,
+                            const short flag,
+                            const short type,
+                            const bool is_surf,
+                            const int dir,
+                            char *message_dst,
+                            const size_t maxncpy)
+{
+  int points_needed;
+  NURBSValidationStatus status = nurb_check_valid(
+      pnts, order, flag, type, is_surf, &points_needed);
+
+  const char *msg_template = nullptr;
+  switch (status) {
+    case NURBSValidationStatus::Valid:
+      message_dst[0] = 0;
+      return false;
+    case NURBSValidationStatus::AtLeastTwoPointsRequired:
+      if (dir == 1) {
+        /* Exception made for curves as their pntsv == 1. */
+        message_dst[0] = 0;
+        return false;
+      }
+      msg_template = TIP_("At least two points required");
+      break;
+    case NURBSValidationStatus::MorePointsThanOrderRequired:
+      msg_template = TIP_("Must have more control points than Order");
+      break;
+    case NURBSValidationStatus::MoreRowsForBezierRequired:
+      msg_template = TIP_("%d more %s row(s) needed for Bezier");
+      break;
+    case NURBSValidationStatus::MorePointsForBezierRequired:
+      msg_template = TIP_("%d more point(s) needed for Bezier");
+      break;
   }
 
-  if (nu->pntsu < nu->orderu) {
-    return false;
-  }
-  if (((nu->flagu & CU_NURB_CYCLIC) == 0) && (nu->flagu & CU_NURB_BEZIER)) {
-    /* Bezier U Endpoints */
-    if (nu->orderu == 4) {
-      if (nu->pntsu < 5) {
-        return false; /* bezier with 4 orderu needs 5 points */
-      }
-    }
-    else {
-      if (nu->orderu != 3) {
-        return false; /* order must be 3 or 4 */
-      }
-    }
-  }
+  BLI_snprintf(message_dst, maxncpy, msg_template, points_needed, dir == 0 ? "U" : "V");
   return true;
 }
+
+bool BKE_nurb_check_valid_u(const Nurb *nu)
+{
+  int points_needed;
+  return NURBSValidationStatus::Valid ==
+         nurb_check_valid(
+             nu->pntsu, nu->orderu, nu->flagu, nu->type, nu->pntsv > 1, &points_needed);
+}
+
 bool BKE_nurb_check_valid_v(const Nurb *nu)
 {
-  if (nu->pntsv <= 1) {
-    return false;
-  }
-  if (nu->type != CU_NURBS) {
-    return true; /* not a nurb, lets assume its valid */
-  }
-
-  if (nu->pntsv < nu->orderv) {
-    return false;
-  }
-  if (((nu->flagv & CU_NURB_CYCLIC) == 0) && (nu->flagv & CU_NURB_BEZIER)) {
-    /* Bezier V Endpoints */
-    if (nu->orderv == 4) {
-      if (nu->pntsv < 5) {
-        return false; /* bezier with 4 orderu needs 5 points */
-      }
-    }
-    else {
-      if (nu->orderv != 3) {
-        return false; /* order must be 3 or 4 */
-      }
-    }
-  }
-  return true;
+  int points_needed;
+  return NURBSValidationStatus::Valid ==
+         nurb_check_valid(
+             nu->pntsv, nu->orderv, nu->flagv, nu->type, nu->pntsv > 1, &points_needed);
 }
 
 bool BKE_nurb_check_valid_uv(const Nurb *nu)
@@ -4767,10 +4815,6 @@ bool BKE_nurb_order_clamp_u(struct Nurb *nu)
     nu->orderu = max_ii(2, nu->pntsu);
     changed = true;
   }
-  if (((nu->flagu & CU_NURB_CYCLIC) == 0) && (nu->flagu & CU_NURB_BEZIER)) {
-    CLAMP(nu->orderu, 3, 4);
-    changed = true;
-  }
   return changed;
 }
 
@@ -4779,10 +4823,6 @@ bool BKE_nurb_order_clamp_v(struct Nurb *nu)
   bool changed = false;
   if (nu->pntsv < nu->orderv) {
     nu->orderv = max_ii(2, nu->pntsv);
-    changed = true;
-  }
-  if (((nu->flagv & CU_NURB_CYCLIC) == 0) && (nu->flagv & CU_NURB_BEZIER)) {
-    CLAMP(nu->orderv, 3, 4);
     changed = true;
   }
   return changed;

@@ -169,7 +169,7 @@ void diag_dir(bvec4 edges1, bvec4 edges2, out vec2 line_start, out vec2 line_end
 
 void main()
 {
-  uint ref = textureLod(outlineId, uvcoordsvar.st, 0.0).r;
+  uint ref = textureLod(outlineId, uvcoordsvar.xy, 0.0).r;
   uint ref_col = ref;
 
   vec2 uvs = gl_FragCoord.xy * sizeViewportInv.xy;
@@ -358,6 +358,12 @@ void main()
       line_end = vec2(0.0, 0.5);
       break;
     default:
+      /* Ensure values are assigned to, avoids undefined behaviour for
+       * divergent control-flow. This can occur if discard is called
+       * as discard is not treated as a return in Metal 2.2. So
+       * side-effects can still cause problems. */
+      line_start = vec2(0.0);
+      line_end = vec2(0.0);
       break;
   }
 

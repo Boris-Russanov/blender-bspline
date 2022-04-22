@@ -18,8 +18,11 @@
 
 #include "UI_view2d.h"
 
+#include "SEQ_channels.h"
 #include "SEQ_effects.h"
 #include "SEQ_iterator.h"
+#include "SEQ_relations.h"
+#include "SEQ_render.h"
 #include "SEQ_sequencer.h"
 
 #include "transform.h"
@@ -100,8 +103,7 @@ static void query_strip_effects_fn(Sequence *seq_reference,
 
   /* Find all strips connected to `seq_reference`. */
   LISTBASE_FOREACH (Sequence *, seq_test, seqbase) {
-    if (seq_test->seq1 == seq_reference || seq_test->seq2 == seq_reference ||
-        seq_test->seq3 == seq_reference) {
+    if (SEQ_relation_is_effect_of_strip(seq_test, seq_reference)) {
       query_strip_effects_fn(seq_test, seqbase, collection);
     }
   }
@@ -121,14 +123,16 @@ static SeqCollection *seq_collection_extract_effects(SeqCollection *collection)
 
 static SeqCollection *query_snap_targets(const TransInfo *t, SeqCollection *snap_sources)
 {
-  ListBase *seqbase = SEQ_active_seqbase_get(SEQ_editing_get(t->scene));
+  Editing *ed = SEQ_editing_get(t->scene);
+  ListBase *seqbase = SEQ_active_seqbase_get(ed);
+  ListBase *channels = SEQ_channels_displayed_get(ed);
   const short snap_flag = SEQ_tool_settings_snap_flag_get(t->scene);
   SeqCollection *snap_targets = SEQ_collection_create(__func__);
   LISTBASE_FOREACH (Sequence *, seq, seqbase) {
     if (seq->flag & SELECT) {
       continue; /* Selected are being transformed. */
     }
-    if ((seq->flag & SEQ_MUTE) && (snap_flag & SEQ_SNAP_IGNORE_MUTED)) {
+    if (SEQ_render_is_muted(channels, seq) && (snap_flag & SEQ_SNAP_IGNORE_MUTED)) {
       continue;
     }
     if (seq->type == SEQ_TYPE_SOUND_RAM && (snap_flag & SEQ_SNAP_IGNORE_SOUND)) {

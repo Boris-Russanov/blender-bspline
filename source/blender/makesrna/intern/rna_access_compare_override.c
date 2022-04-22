@@ -37,6 +37,7 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
+#include "RNA_prototypes.h"
 
 #include "rna_access_internal.h"
 #include "rna_internal.h"
@@ -611,10 +612,6 @@ static bool rna_property_override_operation_apply(Main *bmain,
                                       ptr_item_src,
                                       ptr_item_storage,
                                       opop);
-  if (success) {
-    RNA_property_update_main(bmain, NULL, ptr_dst, prop_dst);
-  }
-
   return success;
 }
 

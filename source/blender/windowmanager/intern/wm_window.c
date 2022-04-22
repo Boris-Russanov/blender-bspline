@@ -1215,6 +1215,7 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
         wmEvent event;
         wm_event_init_from_window(win, &event);
         event.type = MOUSEMOVE;
+        event.val = KM_NOTHING;
         copy_v2_v2_int(event.prev_xy, event.xy);
         event.flag = 0;
 
@@ -1328,7 +1329,7 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
           WM_operator_properties_create_ptr(&props_ptr, ot);
           RNA_string_set(&props_ptr, "filepath", path);
           RNA_boolean_set(&props_ptr, "display_file_selector", false);
-          WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &props_ptr);
+          WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &props_ptr, NULL);
           WM_operator_properties_free(&props_ptr);
 
           CTX_wm_window_set(C, NULL);
@@ -1346,6 +1347,7 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr C_void_ptr
 
         /* activate region */
         event.type = MOUSEMOVE;
+        event.val = KM_NOTHING;
         copy_v2_v2_int(event.prev_xy, event.xy);
         event.flag = 0;
 
@@ -1539,7 +1541,15 @@ void wm_ghost_init(bContext *C)
     }
 
     g_system = GHOST_CreateSystem();
-    GHOST_SystemInitDebug(g_system, G.debug & G_DEBUG_GHOST);
+
+    GHOST_Debug debug = {0};
+    if (G.debug & G_DEBUG_GHOST) {
+      debug.flags |= GHOST_kDebugDefault;
+    }
+    if (G.debug & G_DEBUG_WINTAB) {
+      debug.flags |= GHOST_kDebugWintab;
+    }
+    GHOST_SystemInitDebug(g_system, debug);
 
     if (C != NULL) {
       GHOST_AddEventConsumer(g_system, consumer);

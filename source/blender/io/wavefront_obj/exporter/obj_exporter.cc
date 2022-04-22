@@ -68,6 +68,17 @@ static void print_exception_error(const std::system_error &ex)
             << std::endl;
 }
 
+static bool is_curve_nurbs_compatible(const Nurb *nurb)
+{
+  while (nurb) {
+    if (nurb->type == CU_BEZIER || nurb->pntsv != 1) {
+      return false;
+    }
+    nurb = nurb->next;
+  }
+  return true;
+}
+
 /**
  * Filter supported objects from the Scene.
  *
@@ -88,8 +99,8 @@ filter_supported_objects(Depsgraph *depsgraph, const OBJExportParams &export_par
     }
     switch (object->type) {
       case OB_SURF:
-        /* Export in mesh form: vertices and polygons. */
-        ATTR_FALLTHROUGH;
+        /* Evaluated surface objects appear as mesh objects from the iterator. */
+        break;
       case OB_MESH:
         r_exportable_meshes.append(std::make_unique<OBJMesh>(depsgraph, export_params, object));
         break;
@@ -104,27 +115,13 @@ filter_supported_objects(Depsgraph *depsgraph, const OBJExportParams &export_par
           }
           break;
         }
-        switch (nurb->type) {
-          case CU_NURBS:
-            if (export_params.export_curves_as_nurbs) {
-              /* Export in parameter form: control points. */
-              r_exportable_nurbs.append(
-                  std::make_unique<OBJCurve>(depsgraph, export_params, object));
-            }
-            else {
-              /* Export in mesh form: edges and vertices. */
-              r_exportable_meshes.append(
-                  std::make_unique<OBJMesh>(depsgraph, export_params, object));
-            }
-            break;
-          case CU_BEZIER:
-            /* Always export in mesh form: edges and vertices. */
-            r_exportable_meshes.append(
-                std::make_unique<OBJMesh>(depsgraph, export_params, object));
-            break;
-          default:
-            /* Other curve types are not supported. */
-            break;
+        if (export_params.export_curves_as_nurbs && is_curve_nurbs_compatible(nurb)) {
+          /* Export in parameter form: control points. */
+          r_exportable_nurbs.append(std::make_unique<OBJCurve>(depsgraph, export_params, object));
+        }
+        else {
+          /* Export in mesh form: edges and vertices. */
+          r_exportable_meshes.append(std::make_unique<OBJMesh>(depsgraph, export_params, object));
         }
         break;
       }
@@ -203,6 +200,9 @@ static void write_mesh_objects(Vector<std::unique_ptr<OBJMesh>> exportable_as_me
       if (obj.tot_polygons() > 0) {
         if (export_params.export_smooth_groups) {
           obj.calc_smooth_groups(export_params.smooth_groups_bitflags);
+        }
+        if (export_params.export_materials) {
+          obj.calc_poly_order();
         }
         if (export_params.export_normals) {
           obj_writer.write_poly_normals(fh, obj);
