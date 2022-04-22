@@ -1,7 +1,8 @@
 #include "BKE_modifier.h"
 #include "DNA_mesh_types.h"
-#include "DNA_modifier_types.h"	
-//extra?
+#include "DNA_modifier_types.h"
+
+//TODO: clear all uneeded #includes -BR 4/21
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -51,8 +52,6 @@
 #include "BKE_mesh_runtime.h"
 #include "BKE_main.h"
 
-//#inlcude "BKE_to_bspline_Halfedge.h"	//name instead of bspline?
-//#inlcude "BKE_to_bspline_helper.h"	//name instead of bspline?
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -83,15 +82,32 @@
 
 //need to add BsplineModifierData struct
 /* add this to source/blender/makesdna/ in file DNA_modifier_types.h
-typedef struct BsplineModifierData {
+typedef struct BsplineModifierData {	//struct for Bspline mod data.
   ModifierData modifier;
-  //int number;
-  //int _pad0; //pad out the struct in muliples of 8 bytes
+  //add extra stuff here make sure it's in groups of eight bytes.
+  struct Object *obj;
+  int degree;
+  short applied;
+  char _pad[2];
+  void *_pad0;
+  //always name to pad as: char _pad[#];
 } BsplineModifierData;
-*/ //done
-//last left off on the RNA section of the article. 2/9/22
-//basic/minimal appears and is recognized by blender 2/23/22
-//not accurate anymore, update later 4/8
+*/
+//updated 4/21
+/* LIST OF FILES MODIFIED: '+' == added, '=' == changed
+	=source/blender/modifiers/CMakeLists.txt				//added MOD_to_bspline.c so it will compile with "make"
+	+source/blender/modifiers/intern/MOD_to_bspline.c		//currently in this file, does all functionality of modier (entry point)
+	=source/blender/modifiers/MOD_modifiertypes.h			//add the modifier to global modifier table.
+	=source/blender/modifiers/intern/MOD_util.c				//added init of emodifier.
+	=source/blender/makesdna/intern/DNA_modifier_types.h	//Defines modifier data and location in list of mods.
+	=source/blender/makesdna/intern/DNA_modifier_defaults.h	//declares defualt values for modifer data.
+	=source/blender/makesdna/intern/DNA_defaults.c			//links default vals to rna with SDNA_DEFAULT_DECL_STRUCT, etc.
+	=source/blender/makesrna/intern/rna_modifier.c			//enables UI and limits for modifier data.
+	=source/blender/makesrna/RNA_access.h					//added RNA modifier variant so modifier data can changed.
+	=source/blender/blenkernel/CMakeLists.txt				//adds the files with the function definitions for modifer to have functionality. (translated from python)
+	+source/blender/blenkernel/bspline.h					//Declares functions for bspline to use.
+	+source/blender/blenkernel/intern/bspline.c				//Defines functions for bspline to use.
+*/
 
 static void initData(ModifierData *md)
 {
@@ -111,7 +127,7 @@ static void freeData(ModifierData *md) {
 }
 
 
-//supposed entry function
+//Entry function, reverted back to const ctx, currently only makes a curved surface of a quad mesh.
 static Mesh *modifyMesh(struct ModifierData *md,
                                  const struct ModifierEvalContext *ctx,
                                  struct Mesh *mesh)
@@ -687,7 +703,7 @@ static Mesh *modifyMesh(struct ModifierData *md,
 
 }
 
-//most likely links it but unsure how it exactly works.
+//most likely links object of BsplineModifierData, is not used at the moment.
 static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   BsplineModifierData *bmd = (BsplineModifierData *)md;
@@ -695,7 +711,7 @@ static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *u
   walk(userData, ob, (ID **)&bmd->obj, IDWALK_CB_NOP);
 }
 
-//def important, depsgraph always has issues.
+//does nothing useful, can removed. This relates to foreachIDLink
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
 {
 	BsplineModifierData *bmd = (BsplineModifierData *)md;
@@ -711,15 +727,15 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
 
 
 
-
+//draws UI 
 static void panel_draw(const bContext *UNUSED(C), Panel *panel)
 {
     uiLayout *row, *sub;
     uiLayout *layout = panel->layout;
 
     PointerRNA ob_ptr;
-    PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL); //second parm can be NULL or &ob_ptr, unsure of purpose atm 3/11 BR
-    //hardstuck trying to get modifier menu for this to work for several hours now... 3/11 BR 
+    PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL); //second parm can be NULL or &ob_ptr, unsure of purpose atm 3/11 -BR
+    //hardstuck trying to get modifier menu for this to work for several hours now... 3/11 -BR
 
     //start
     uiLayoutSetPropSep(layout, true);
@@ -741,13 +757,14 @@ static void panel_draw(const bContext *UNUSED(C), Panel *panel)
     //end
 }
 
-//needed to even have panel...
+//necessary to even have panel...
 static void panelRegister(ARegionType *region_type)
 {
   modifier_panel_register(region_type, eModifierType_Bspline, panel_draw);
 }
 
-ModifierTypeInfo modifierType_Bspline = {
+//attributes here refers to a function call that is defined here, if NULL, either no not used in this modifier or not linked to alternative functions.
+ModifierTypeInfo modifierType_Bspline = {	//ones that are "unused" don't do anything meaningful at the moment.
     /* name */ "Bspline",
     /* structName */ "BsplineModifierData",
     /* structSize */ sizeof(BsplineModifierData),
@@ -756,7 +773,7 @@ ModifierTypeInfo modifierType_Bspline = {
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode,
     /* icon */ ICON_MOD_SUBSURF,
 
-    /* copyData */ BKE_modifier_copydata_generic,
+    /* copyData */ BKE_modifier_copydata_generic,	//uses alternative default for copy, could create own but this is fine for now.
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
@@ -769,10 +786,10 @@ ModifierTypeInfo modifierType_Bspline = {
     /* requiredDataMask */ NULL,
     /* freeData */ freeData,
     /* isDisabled */ NULL,
-    /* updateDepsgraph */ updateDepsgraph,
+    /* updateDepsgraph */ updateDepsgraph,	//unused
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachIDLink */ foreachIDLink,
+    /* foreachIDLink */ foreachIDLink,		//unused
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
     /* panelRegister */ panelRegister,

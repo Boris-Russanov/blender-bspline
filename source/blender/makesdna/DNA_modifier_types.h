@@ -84,7 +84,7 @@ typedef enum ModifierType {
   eModifierType_MeshToVolume = 58,
   eModifierType_VolumeDisplace = 59,
   eModifierType_VolumeToMesh = 60,
-  eModifierType_Bspline = 61,
+  eModifierType_Bspline = 61,	//its number
   NUM_MODIFIER_TYPES,
 } ModifierType;
 
@@ -2383,7 +2383,7 @@ typedef enum VolumeToMeshFlag {
   VOLUME_TO_MESH_USE_SMOOTH_SHADE = 1 << 0,
 } VolumeToMeshFlag;
 
-typedef struct BsplineModifierData {
+typedef struct BsplineModifierData {	//struct for Bspline mod data.
   ModifierData modifier;
   //add extra stuff here make sure it's in groups of eight bytes.
   struct Object *obj;

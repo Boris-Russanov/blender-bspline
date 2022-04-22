@@ -334,6 +334,6 @@ void modifier_type_init(ModifierTypeInfo *types[])
   INIT_TYPE(VolumeDisplace);
   INIT_TYPE(VolumeToMesh);
   INIT_TYPE(Nodes);
-  INIT_TYPE(Bspline);
+  INIT_TYPE(Bspline);	//added in
 #undef INIT_TYPE
 }

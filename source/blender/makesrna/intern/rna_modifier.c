@@ -115,7 +115,7 @@ const EnumPropertyItem rna_enum_object_modifier_type_items[] = {
      ICON_MOD_BOOLEAN,
      "Boolean",
      "Use another shape to cut, combine or perform a difference operation"},
-	{eModifierType_Bspline, //lol
+	{eModifierType_Bspline, //added to List of modifiers for UI
      "Bsplines",
      ICON_MOD_SUBSURF,
      "Bsplines",
@@ -7241,7 +7241,7 @@ static void rna_def_modifier_b_spline(BlenderRNA *brna)
   StructRNA *srna;
   PropertyRNA *prop;
 
-  // Define the RNA and bind it to the BsplineaModifierData DNA struct
+  // Define the RNA and bind it to the BsplineModifierData DNA struct
   srna = RNA_def_struct(brna, "BsplineModifier", "Modifier");
   RNA_def_struct_ui_text(srna, "Bspline Modifier", "");
   RNA_def_struct_sdna(srna, "BsplineModifierData");

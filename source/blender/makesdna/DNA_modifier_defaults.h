@@ -67,6 +67,7 @@
     .bm_flag = 0, \
   }
 
+//default values set for BsplineModifierData
 #define _DNA_DEFAULT_BsplineModifierData \
   { \
 	.obj = NULL, \
