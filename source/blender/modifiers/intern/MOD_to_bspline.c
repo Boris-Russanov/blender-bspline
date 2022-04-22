@@ -487,11 +487,11 @@ static Mesh *modifyMesh(struct ModifierData *md,
     //  }
     //}
 	
-	printf("vert: %d\n", result->totvert);
-	printf("faces: %d\n", result->totpoly);
-	for (int t = 0; t < result->totvert; t++) {
-        printf("[index %i] x: %f, y: %f, z: %f\n", t, result->mvert[t].co[0], result->mvert[t].co[1], result->mvert[t].co[2]);
-    }
+	//printf("vert: %d\n", result->totvert);
+	//printf("faces: %d\n", result->totpoly);
+	//for (int t = 0; t < result->totvert; t++) {
+    //    printf("[index %i] x: %f, y: %f, z: %f\n", t, result->mvert[t].co[0], result->mvert[t].co[1], result->mvert[t].co[2]);
+    //}
 	
 	//BLI_addtail(BKE_curve_nurbs_get(cu), &nurbslist);
 	//cu->nurb = nurbslist;
