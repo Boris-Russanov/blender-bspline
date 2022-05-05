@@ -58,9 +58,9 @@ typedef struct BsplinePatch {
 //*/
 
 //halfEdge
-struct BMVert* halfEdgeGetVerts(struct BMLoop* halfEdge, uint8_t commands[]);
-struct BMVert halfEdge_get_single_vert(struct BMLoop* halfEdge, uint8_t commands[]);
-struct BMVert* halfEdge_get_verts_repeatN_times(struct BMLoop* halfEdge, uint8_t commands[], uint8_t repeat_times, uint16_t* get_vert_order, uint32_t num_verts_reserved);
+struct BMVert* halfEdgeGetVerts(struct BMLoop** halfEdge, uint8_t commands[], uint8_t commandSize);
+struct BMVert halfEdge_get_single_vert(struct BMLoop** halfEdge, uint8_t commands[], uint8_t commandSize);
+struct BMVert* halfEdge_get_verts_repeatN_times(struct BMLoop** halfEdge, uint8_t commands[], uint8_t commandSize, uint8_t repeat_times, uint16_t* get_vert_order, uint32_t num_verts_reserved);
 
 //Helper
 struct BPoint Helper_add_a_dimesion_to_vector(struct BMVert vec, float weighting);
@@ -92,7 +92,7 @@ float** BezierBsplineConverter_bb2b_mask_selector(int deg);
 
 //additional
 float** getMask(enum MASK_SELECTOR type);
-struct BMVert* rando_giv(float* verts);
+struct BMVert* rando_giv(struct BMesh* bmesh);
 
 #ifdef __cplusplus
 }

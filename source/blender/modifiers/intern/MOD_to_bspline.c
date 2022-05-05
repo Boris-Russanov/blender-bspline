@@ -318,23 +318,26 @@ static Mesh *modifyMesh(struct ModifierData *md,
     //bezt->radius = 1.0;
     //nu->bezt = bezt;
 	
-	bp = (BPoint *)MEM_callocN(4 * sizeof(BPoint), "spline.new.bp"); //add 4 BPoints.
+	bp = (BPoint *)MEM_callocN(9 * sizeof(BPoint), "spline.new.bp"); //add 4 BPoints.
 	bp->radius = 1.0f;
 	
     nu->bp = bp;
 	
 	//have more than one point bc u just have one point.
 	// 2x2 = square.
-	nu->pntsu = 2;
-	nu->pntsv = 2;
+	nu->pntsu = 3;
+	nu->pntsv = 3;
 	//3x3 due to res.
-	nu->orderu = nu->orderv = 2;
+	nu->orderu = nu->orderv = 3;
 	nu->resolu = cu->resolu = 2;
 	nu->resolv = cu->resolv = 2;
 	nu->flag = CU_SMOOTH;
 	nu->flagu = CU_NURB_ENDPOINT;	//CU_NURB_ENDPOINT
-	nu->flagv = CU_NURB_ENDPOINT;
+	nu->flagv = CU_NURB_ENDPOINT;	//supposedly is this by default.
 	nu->type = CU_NURBS; //CU_NURBS; CU_PRIM_PATCH;
+	nu->hide = 0;	//unsure what this does,
+	//BKE_nurb_knot_calc_u(nu);
+    //BKE_nurb_knot_calc_v(nu);
 	//type nurbs so it can be converted.
 	nurbslist.first = nu;
 	//nurbslist.last = nu;
@@ -363,15 +366,27 @@ static Mesh *modifyMesh(struct ModifierData *md,
 	
 	//if add.
 	//void BKE_curve_nurbs_vert_coords_apply(ListBase *lb, const float (*vert_coords)[3], const bool constrain_2d);
-	//float verts[27] = {-1.0f, -1.0f, 1.0f,		-1.0f, 0.0f, 0.0f,		-1.0f, 1.0f, 0.0f,
-	//					0.0f, -1.0f, 0.0f,		0.0f, 0.0f, 0.0f,		0.0f, 1.0f, 0.0f,
-	//					1.0f, -1.0f, 0.0f,		1.0f, 0.0f, 0.0f,		1.0f, 1.0f, 0.0f,};
-	float verts[12] = {1.0f, 1.0f, 1.0f,		-1.0f, 1.0f, -1.0f,		1.0f, -1.0f, -1.0f, 				-1.0f, -1.0f, -1.0f};
+	float verts[27] = {5.0f, 0.0f, 5.0f,		0.0f, 0.0f, 5.0f,		-5.0f, 0.0f, 5.0f,
+						5.0f, 0.0f, 0.0f,		0.0f, 0.0f, 0.0f,		-5.0f, 0.0f, 0.0f,
+						5.0f, 0.0f, -5.0f,		0.0f, 0.0f, -5.0f,		-5.0f, 0.0f, -5.0f,};
+	//float verts[12] = {1.0f, 1.0f, 1.0f,		-1.0f, 1.0f, -1.0f,		1.0f, -1.0f, -1.0f, 				-1.0f, -1.0f, -1.0f};
 	///*
-	BM_ITER_MESH_INDEX(v, &viter, bm, BM_VERTS_OF_MESH, counter)
+	//testing, mem leaks don't crash blender, some func calls needed or bad indexing not sure.
+	//BMVert* list_verts = rando_giv(bm);
+	//for (int e = 0; e < bm->totvert + 1; e++) {
+	//	printf("x: %f, y: %f, z: %f\n", list_verts[e].co[0], list_verts[e].co[1], list_verts[e].co[2]);
+	//}
+	//free(list_verts);
+	
+	BM_ITER_MESH(v, &viter, bm, BM_VERTS_OF_MESH)
 	{
-		if (v->co[0] == 0.0f && v->co[1] == 0.0f && v->co[2] == 0.0f) {	//v->co[0] == 0.0f && v->co[1] == 0.0f && v->co[2] == 0.0f RegPatchConstructor_is_same_type(v) == true
-			//float** finalMAT = RegPatchConstructor_get_patch(v);
+		printf("x:%f y:%f z:%f\n", v->co[0], v->co[1], v->co[2]);
+	}
+	
+	BM_ITER_MESH_INDEX(v, &viter, bm, BM_VERTS_OF_MESH, counter)
+	{	
+		if (RegPatchConstructor_is_same_type(v) == true) {	//if (v->co[0] == 0.0f && v->co[1] == 0.0f && v->co[2] == 0.0f) { RegPatchConstructor_is_same_type(v) == true
+			float** finalMAT = RegPatchConstructor_get_patch(v);
 			//BsplinePatch patch = RegPatchConstructor_get_patch(v);
 			//float* bspline_coefs_arr = Helper_convert_verts_from_matrix_to_list(finalMAT, 9);
 			//BMVert* nb_verts = RegPatchConstructor_get_neighbor_verts(v);
@@ -394,28 +409,40 @@ static Mesh *modifyMesh(struct ModifierData *md,
 			//printf("alive\n");
 			//BKE_curve_nurbs_vert_coords_apply(&nurbslist, bspline_coefs_arr, false);
 			//BPoint *bp1 = nu->bp;
-			//for (int i = 0; i < 9; i++) {
-				//float coords[3] = {0};
-				//for (int j = 0; j < 3; j++) {
+			for (int i = 0; i < 9; i++) {
+				float coords[3] = {0};
+				//coords[0] = finalMAT[i][0];
+				//coords[1] = finalMAT[i][1];
+				//coords[2] = finalMAT[i][2];
+				
+				//for (int j = 0; i < nu->pntsu * nu->pntsv; j++) {
+				//copy_v3_v3(nu->bp[i].vec, coords);
+				//}
+				//nu->bp[i].vec[0] = finalMAT[i][0];
+				//nu->bp[i].vec[1] = finalMAT[i][1];
+				//nu->bp[i].vec[2] = finalMAT[i][2];
+				//nu->bp[i].vec[3] = 1.0f;
+				for (int j = 0; j < 3; j++) {
 					//coords[j] = finalMAT[i][j];
 					//printf("final[%d][%d] = %f\n", i, j, finalMAT[i][j]);
-				//}
-				//copy_v3_v3(bp1->vec, coords);
-			//}
-			//MEM_printmemlist();
-			//for (int i = 0; i < 9; i++) {
-				//for (int j = 0; j < 3; j++) {
-					//nu->bp[i].vec[j] = finalMAT[i][j];
 					//printf("nu->bp[%d].vec[%d] = %f\n", i, j, nu->bp[i].vec[j]);
-				//}
-				//nu->bp[i].vec[3] = 0.0f;
-			//}
-			//for (int i = 0; i < 9; i++) {
-				//MEM_freeN(finalMAT[i]);
-			//}
-			//MEM_freeN(finalMAT);
-			//MEM_freeN(bspline_coefs_arr);
-			//BKE_curve_nurbs_vert_coords_apply(&nurbslist, bspline_coefs_arr, NULL); //or 0 for last param.
+				}
+				//copy_v3_v3(nu->bp[i].vec, coords);
+			}
+			//MEM_printmemlist();
+			for (int i = 0; i < 9; i++) {
+				for (int j = 0; j < 3; j++) {
+					nu->bp[i].vec[j] = finalMAT[i][j];
+					printf("nu->bp[%d].vec[%d] = %f\n", i, j, nu->bp[i].vec[j]);
+				}
+				nu->bp[i].vec[3] = 1.0f;
+			}
+			for (int i = 0; i < 9; i++) {
+				free(finalMAT[i]);
+			}
+			free(finalMAT);
+			//free(bspline_coefs_arr);
+			//BKE_curve_nurbs_vert_coords_apply(&nurbslist, verts, NULL); //or 0 for last param.
 		}
 		//if (v->co[0] == 0.0f && v->co[1] == 0.0f && v->co[2] == 0.0f) {
 		//	printf("%d\n", RegPatchConstructor_is_same_type(v));
@@ -423,30 +450,31 @@ static Mesh *modifyMesh(struct ModifierData *md,
 		//}
 	}
 	//*/
-	for (int i = 0; i < mesh->totvert; i++) {
-		verts[i*3] = mesh->mvert[i].co[0];
-		verts[(3*i)+1] = mesh->mvert[i].co[1];
-		verts[(3*i)+2] = mesh->mvert[i].co[2];
-	}
-	BKE_curve_nurbs_vert_coords_apply(&nurbslist, verts, false);
+	//for (int i = 0; i < mesh->totvert; i++) {
+	//	verts[i*3] = mesh->mvert[i].co[0];
+	//	verts[(3*i)+1] = mesh->mvert[i].co[1];
+	//	verts[(3*i)+2] = mesh->mvert[i].co[2];
+	//}
+	//BKE_curve_nurbs_vert_coords_apply(&nurbslist, verts, false);
 	//BKE_curve_nurbs_vert_coords_apply(&nurbslist, verts, NULL); //or 0 for last param.
-	bp[0].vec[3] = 1.0f;
-	bp[1].vec[3] = 1.0f;
-	bp[2].vec[3] = 1.0f;
-	bp[3].vec[3] = 1.0f;
+	//bp[0].vec[3] = 1.0f;
+	//bp[1].vec[3] = 1.0f;
+	//bp[2].vec[3] = 1.0f;
+	//bp[3].vec[3] = 1.0f;
 	//bp[4].vec[3] = 1.0f;
 	//bp[5].vec[3] = 1.0f;
 	//bp[6].vec[3] = 1.0f;
 	//bp[7].vec[3] = 1.0f;
 	//bp[8].vec[3] = 1.0f;
-	nu->hide = 0;	//show up pls.
-	BKE_nurb_knot_calc_u(nu);
-    BKE_nurb_knot_calc_v(nu);
 	
 	cu->nurb = nurbslist;
 	
 	ob->data = cu;
     ob->type = OB_SURF; //OB_CURVES	OB_CURVES_LEGACY
+	
+	//needs to be called post new verts applied.
+	BKE_nurb_knot_calc_u(nu);
+    BKE_nurb_knot_calc_v(nu);
 	
 	//added mesh to obj for test..
 	//ob = BKE_object_add_only_object(bmain, OB_EMPTY, ctx->object->id.name + 1);
