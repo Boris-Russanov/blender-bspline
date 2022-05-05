@@ -361,7 +361,18 @@ static GPUVertFormat *get_origindex_format()
 {
   static GPUVertFormat format;
   if (format.attr_len == 0) {
-    GPU_vertformat_attr_add(&format, "color", GPU_COMP_U32, 1, GPU_FETCH_INT);
+    GPU_vertformat_attr_add(&format, "index", GPU_COMP_I32, 1, GPU_FETCH_INT);
+  }
+  return &format;
+}
+
+GPUVertFormat *draw_subdiv_get_pos_nor_format()
+{
+  static GPUVertFormat format = {0};
+  if (format.attr_len == 0) {
+    GPU_vertformat_attr_add(&format, "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
+    GPU_vertformat_attr_add(&format, "nor", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
+    GPU_vertformat_alias_add(&format, "vnor");
   }
   return &format;
 }
@@ -442,15 +453,15 @@ static uint tris_count_from_number_of_loops(const uint number_of_loops)
  * \{ */
 
 void draw_subdiv_init_origindex_buffer(GPUVertBuf *buffer,
-                                       int *vert_origindex,
+                                       int32_t *vert_origindex,
                                        uint num_loops,
                                        uint loose_len)
 {
   GPU_vertbuf_init_with_format_ex(buffer, get_origindex_format(), GPU_USAGE_STATIC);
   GPU_vertbuf_data_alloc(buffer, num_loops + loose_len);
 
-  int *vbo_data = (int *)GPU_vertbuf_get_data(buffer);
-  memcpy(vbo_data, vert_origindex, num_loops * sizeof(int));
+  int32_t *vbo_data = (int32_t *)GPU_vertbuf_get_data(buffer);
+  memcpy(vbo_data, vert_origindex, num_loops * sizeof(int32_t));
 }
 
 GPUVertBuf *draw_subdiv_build_origindex_buffer(int *vert_origindex, uint num_loops)
@@ -1132,7 +1143,7 @@ static void draw_subdiv_init_ubo_storage(const DRWSubdivCache *cache,
   ubo->max_patch_face = cache->gpu_patch_map.max_patch_face;
   ubo->max_depth = cache->gpu_patch_map.max_depth;
   ubo->patches_are_triangular = cache->gpu_patch_map.patches_are_triangular;
-  ubo->coarse_poly_count = cache->bm ? cache->bm->totface : cache->num_coarse_poly;
+  ubo->coarse_poly_count = cache->num_coarse_poly;
   ubo->optimal_display = cache->optimal_display;
   ubo->num_subdiv_loops = cache->num_subdiv_loops;
   ubo->edge_loose_offset = cache->num_subdiv_loops * 2;
@@ -1898,7 +1909,8 @@ static bool draw_subdiv_create_requested_buffers(const Scene *scene,
                                                  const bool /*use_hide*/,
                                                  OpenSubdiv_EvaluatorCache *evaluator_cache)
 {
-  SubsurfModifierData *smd = BKE_object_get_last_subsurf_modifier(ob);
+  SubsurfModifierData *smd = reinterpret_cast<SubsurfModifierData *>(
+      BKE_modifiers_findby_session_uuid(ob, &mesh->runtime.subsurf_session_uuid));
   BLI_assert(smd);
 
   const bool is_final_render = DRW_state_is_scene_render();
@@ -1951,6 +1963,13 @@ static bool draw_subdiv_create_requested_buffers(const Scene *scene,
   draw_cache->subdiv = subdiv;
   draw_cache->optimal_display = optimal_display;
   draw_cache->num_subdiv_triangles = tris_count_from_number_of_loops(draw_cache->num_subdiv_loops);
+
+  /* Copy topology information for stats display. Use `mesh` directly, as `mesh_eval` could be the
+   * edit mesh. */
+  mesh->runtime.subsurf_totvert = draw_cache->num_subdiv_verts;
+  mesh->runtime.subsurf_totedge = draw_cache->num_subdiv_edges;
+  mesh->runtime.subsurf_totpoly = draw_cache->num_subdiv_quads;
+  mesh->runtime.subsurf_totloop = draw_cache->num_subdiv_loops;
 
   draw_cache->use_custom_loop_normals = (smd->flags & eSubsurfModifierFlag_UseCustomNormals) &&
                                         (mesh_eval->flag & ME_AUTOSMOOTH) &&

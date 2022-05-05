@@ -109,8 +109,8 @@ class VIEW3D_HT_tool_header(Header):
             if is_valid_context:
                 brush = context.tool_settings.gpencil_sculpt_paint.brush
                 tool = brush.gpencil_sculpt_tool
-                if tool in {'SMOOTH', 'RANDOMIZE'}:
-                    layout.popover("VIEW3D_PT_tools_grease_pencil_sculpt_options")
+                if tool != 'CLONE':
+                    layout.popover("VIEW3D_PT_tools_grease_pencil_sculpt_brush_popover")
                 layout.popover("VIEW3D_PT_tools_grease_pencil_sculpt_appearance")
         elif tool_mode == 'WEIGHT_GPENCIL':
             if is_valid_context:
@@ -151,6 +151,11 @@ class VIEW3D_HT_tool_header(Header):
                 row.popover(panel="VIEW3D_PT_sculpt_symmetry_for_topbar", text="")
             elif mode_string == 'PAINT_VERTEX':
                 row.popover(panel="VIEW3D_PT_tools_vertexpaint_symmetry_for_topbar", text="")
+        elif mode_string == 'SCULPT_CURVES':
+            _row, sub = row_for_mirror()
+            sub.prop(context.object.data, "use_mirror_x", text="X", toggle=True)
+            sub.prop(context.object.data, "use_mirror_y", text="Y", toggle=True)
+            sub.prop(context.object.data, "use_mirror_z", text="Z", toggle=True)
 
         # Expand panels from the side-bar as popovers.
         popover_kw = {"space_type": 'VIEW_3D', "region_type": 'UI', "category": "Tool"}
@@ -511,9 +516,10 @@ class _draw_tool_settings_context_mode:
             layout.prop(brush, "curve_preset")
 
         if brush.curves_sculpt_tool == 'ADD':
-            layout.prop(brush, "use_frontface")
+            layout.prop(brush, "use_frontface", text="Front Faces Only")
             layout.prop(brush, "falloff_shape", expand=True)
             layout.prop(brush.curves_sculpt_settings, "add_amount")
+            layout.prop(brush.curves_sculpt_settings, "points_per_curve")
             layout.prop(brush.curves_sculpt_settings, "curve_length")
             layout.prop(brush.curves_sculpt_settings, "interpolate_length")
             layout.prop(brush.curves_sculpt_settings, "interpolate_shape")
@@ -528,6 +534,9 @@ class _draw_tool_settings_context_mode:
         if brush.curves_sculpt_tool == 'SNAKE_HOOK':
             layout.prop(brush, "falloff_shape", expand=True)
             layout.prop(brush, "curve_preset")
+
+        if brush.curves_sculpt_tool == 'DELETE':
+            layout.prop(brush, "falloff_shape", expand=True)
 
 
 class VIEW3D_HT_header(Header):
@@ -3177,19 +3186,15 @@ class VIEW3D_MT_mask(Menu):
 
         props = layout.operator("sculpt.mask_filter", text='Smooth Mask')
         props.filter_type = 'SMOOTH'
-        props.auto_iteration_count = True
 
         props = layout.operator("sculpt.mask_filter", text='Sharpen Mask')
         props.filter_type = 'SHARPEN'
-        props.auto_iteration_count = True
 
         props = layout.operator("sculpt.mask_filter", text='Grow Mask')
         props.filter_type = 'GROW'
-        props.auto_iteration_count = True
 
         props = layout.operator("sculpt.mask_filter", text='Shrink Mask')
         props.filter_type = 'SHRINK'
-        props.auto_iteration_count = True
 
         props = layout.operator("sculpt.mask_filter", text='Increase Contrast')
         props.filter_type = 'CONTRAST_INCREASE'
@@ -5392,16 +5397,12 @@ class VIEW3D_MT_sculpt_mask_edit_pie(Menu):
         op.value = 0.0
         op = pie.operator("sculpt.mask_filter", text='Smooth Mask')
         op.filter_type = 'SMOOTH'
-        op.auto_iteration_count = True
         op = pie.operator("sculpt.mask_filter", text='Sharpen Mask')
         op.filter_type = 'SHARPEN'
-        op.auto_iteration_count = True
         op = pie.operator("sculpt.mask_filter", text='Grow Mask')
         op.filter_type = 'GROW'
-        op.auto_iteration_count = True
         op = pie.operator("sculpt.mask_filter", text='Shrink Mask')
         op.filter_type = 'SHRINK'
-        op.auto_iteration_count = True
         op = pie.operator("sculpt.mask_filter", text='Increase Contrast')
         op.filter_type = 'CONTRAST_INCREASE'
         op.auto_iteration_count = False
@@ -5692,12 +5693,13 @@ class VIEW3D_PT_object_type_visibility(Panel):
     bl_label = "View Object Types"
     bl_ui_units_x = 7
 
-    def draw(self, context):
+    # Allows derived classes to pass view data other than context.space_data.
+    # This is used by the official VR add-on, which passes XrSessionSettings
+    # since VR has a 3D view that only exists for the duration of the VR session.
+    def draw_ex(self, context, view, show_select):
         layout = self.layout
         layout.use_property_split = True
         layout.use_property_decorate = False
-
-        view = context.space_data
 
         layout.label(text="Object Types Visibility")
         layout.separator()
@@ -5736,19 +5738,25 @@ class VIEW3D_PT_object_type_visibility(Panel):
                 continue
 
             attr_v = "show_object_viewport_" + attr
-            attr_s = "show_object_select_" + attr
-
             icon_v = 'HIDE_OFF' if getattr(view, attr_v) else 'HIDE_ON'
-            icon_s = 'RESTRICT_SELECT_OFF' if getattr(view, attr_s) else 'RESTRICT_SELECT_ON'
 
             row = col.row(align=True)
             row.alignment = 'RIGHT'
 
             row.label(text=attr_name)
             row.prop(view, attr_v, text="", icon=icon_v, emboss=False)
-            rowsub = row.row(align=True)
-            rowsub.active = getattr(view, attr_v)
-            rowsub.prop(view, attr_s, text="", icon=icon_s, emboss=False)
+
+            if show_select:
+                attr_s = "show_object_select_" + attr
+                icon_s = 'RESTRICT_SELECT_OFF' if getattr(view, attr_s) else 'RESTRICT_SELECT_ON'
+
+                rowsub = row.row(align=True)
+                rowsub.active = getattr(view, attr_v)
+                rowsub.prop(view, attr_s, text="", icon=icon_s, emboss=False)
+
+    def draw(self, context):
+        view = context.space_data
+        self.draw_ex(context, view, True)
 
 
 class VIEW3D_PT_shading(Panel):

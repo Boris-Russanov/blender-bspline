@@ -643,12 +643,13 @@ typedef struct UserDef_Experimental {
   /* The following options are automatically sanitized (set to 0)
    * when the release cycle is not alpha. */
   char use_new_curves_type;
+  /** Only available when #use_new_curves_type is enabled. */
+  char use_new_curves_tools;
   char use_new_point_cloud_type;
   char use_full_frame_compositor;
   char use_sculpt_tools_tilt;
   char use_extended_asset_browser;
   char use_override_templates;
-  char use_named_attribute_nodes;
   char enable_eevee_next;
   char use_sculpt_texture_paint;
   char _pad0[1];

@@ -2390,12 +2390,12 @@ void precalc_guides(ParticleSimulationData *sim, ListBase *effectors)
   }
 }
 
-int do_guides(Depsgraph *depsgraph,
-              ParticleSettings *part,
-              ListBase *effectors,
-              ParticleKey *state,
-              int index,
-              float time)
+bool do_guides(Depsgraph *depsgraph,
+               ParticleSettings *part,
+               ListBase *effectors,
+               ParticleKey *state,
+               int index,
+               float time)
 {
   CurveMapping *clumpcurve = (part->child_flag & PART_CHILD_USE_CLUMP_CURVE) ? part->clumpcurve :
                                                                                NULL;
@@ -3194,7 +3194,7 @@ void psys_cache_child_paths(ParticleSimulationData *sim,
     return;
   }
 
-  task_pool = BLI_task_pool_create(&ctx, TASK_PRIORITY_LOW);
+  task_pool = BLI_task_pool_create(&ctx, TASK_PRIORITY_HIGH);
   totchild = ctx.totchild;
   totparent = ctx.totparent;
 

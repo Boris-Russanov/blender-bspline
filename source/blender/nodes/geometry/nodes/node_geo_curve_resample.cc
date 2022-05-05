@@ -56,43 +56,6 @@ static void node_update(bNodeTree *ntree, bNode *node)
   nodeSetSocketAvailability(ntree, length_socket, mode == GEO_NODE_CURVE_RESAMPLE_LENGTH);
 }
 
-/** Returns the number of evaluated points in each curve. Used to deselect curves with none. */
-class EvaluatedCountFieldInput final : public GeometryFieldInput {
- public:
-  EvaluatedCountFieldInput() : GeometryFieldInput(CPPType::get<int>(), "Evaluated Point Count")
-  {
-    category_ = Category::Generated;
-  }
-
-  GVArray get_varray_for_context(const GeometryComponent &component,
-                                 const AttributeDomain domain,
-                                 IndexMask UNUSED(mask)) const final
-  {
-    if (component.type() == GEO_COMPONENT_TYPE_CURVE && domain == ATTR_DOMAIN_CURVE &&
-        !component.is_empty()) {
-      const CurveComponent &curve_component = static_cast<const CurveComponent &>(component);
-      const Curves &curves_id = *curve_component.get_for_read();
-      const bke::CurvesGeometry &curves = bke::CurvesGeometry::wrap(curves_id.geometry);
-      curves.ensure_evaluated_offsets();
-      return VArray<int>::ForFunc(curves.curves_num(), [&](const int64_t index) -> int {
-        return curves.evaluated_points_for_curve(index).size();
-      });
-    }
-    return {};
-  }
-
-  uint64_t hash() const override
-  {
-    /* Some random constant hash. */
-    return 234905872379865;
-  }
-
-  bool is_equal_to(const fn::FieldNode &other) const override
-  {
-    return dynamic_cast<const EvaluatedCountFieldInput *>(&other) != nullptr;
-  }
-};
-
 /**
  * Return true if the attribute should be copied/interpolated to the result curves.
  * Don't output attributes that correspond to curve types that have no curves in the result.
@@ -173,7 +136,6 @@ static void gather_point_attributes_to_interpolate(const CurveComponent &src_com
 {
   const Curves &dst_curves_id = *dst_component.get_for_read();
   const bke::CurvesGeometry &dst_curves = bke::CurvesGeometry::wrap(dst_curves_id.geometry);
-  const std::array<int, CURVE_TYPES_NUM> type_counts = dst_curves.count_curve_types();
 
   VectorSet<AttributeIDRef> ids;
   VectorSet<AttributeIDRef> ids_no_interpolation;
@@ -182,7 +144,7 @@ static void gather_point_attributes_to_interpolate(const CurveComponent &src_com
         if (meta_data.domain != ATTR_DOMAIN_POINT) {
           return true;
         }
-        if (!interpolate_attribute_to_curves(id, type_counts)) {
+        if (!interpolate_attribute_to_curves(id, dst_curves.curve_type_counts())) {
           return true;
         }
         if (interpolate_attribute_to_poly_curve(id)) {
@@ -318,7 +280,7 @@ static Curves *resample_to_uniform_count(const CurveComponent &src_component,
   dst_curves.resize(dst_offsets.last(), dst_curves.curves_num());
 
   /* All resampled curves are poly curves. */
-  dst_curves.curve_types_for_write().fill_indices(selection, CURVE_TYPE_POLY);
+  dst_curves.fill_curve_types(selection, CURVE_TYPE_POLY);
 
   VArray<bool> curves_cyclic = src_curves.cyclic();
   VArray<int8_t> curve_types = src_curves.curve_types();
@@ -436,8 +398,6 @@ static Curves *resample_to_uniform_count(const CurveComponent &src_component,
 
 /**
  * Evaluate each selected curve to its implicit evaluated points.
- *
- * \warning Curves with no evaluated points must not be selected.
  */
 static Curves *resample_to_evaluated(const CurveComponent &src_component,
                                      const Field<bool> &selection_field)
@@ -464,7 +424,7 @@ static Curves *resample_to_evaluated(const CurveComponent &src_component,
                   CD_DUPLICATE,
                   src_curves.curves_num());
   /* All resampled curves are poly curves. */
-  dst_curves.curve_types_for_write().fill_indices(selection, CURVE_TYPE_POLY);
+  dst_curves.fill_curve_types(selection, CURVE_TYPE_POLY);
   MutableSpan<int> dst_offsets = dst_curves.offsets_for_write();
 
   src_curves.ensure_evaluated_offsets();
@@ -552,8 +512,10 @@ static Field<int> get_curve_count_field(GeoNodeExecParams params,
                                         const GeometryNodeCurveResampleMode mode)
 {
   if (mode == GEO_NODE_CURVE_RESAMPLE_COUNT) {
-    static fn::CustomMF_SI_SO<int, int> max_one_fn("Clamp Above One",
-                                                   [](int value) { return std::max(1, value); });
+    static fn::CustomMF_SI_SO<int, int> max_one_fn(
+        "Clamp Above One",
+        [](int value) { return std::max(1, value); },
+        fn::CustomMF_presets::AllSpanOrSingle());
     auto clamp_op = std::make_shared<FieldOperation>(
         FieldOperation(max_one_fn, {Field<int>(params.extract_input<Field<int>>("Count"))}));
 
@@ -562,16 +524,18 @@ static Field<int> get_curve_count_field(GeoNodeExecParams params,
 
   if (mode == GEO_NODE_CURVE_RESAMPLE_LENGTH) {
     static fn::CustomMF_SI_SI_SO<float, float, int> get_count_fn(
-        "Length Input to Count", [](const float curve_length, const float sample_length) {
+        "Length Input to Count",
+        [](const float curve_length, const float sample_length) {
           /* Find the number of sampled segments by dividing the total length by
            * the sample length. Then there is one more sampled point than segment. */
           const int count = int(curve_length / sample_length) + 1;
           return std::max(1, count);
-        });
+        },
+        fn::CustomMF_presets::AllSpanOrSingle());
 
     auto get_count_op = std::make_shared<FieldOperation>(
         FieldOperation(get_count_fn,
-                       {Field<float>(std::make_shared<SplineLengthFieldInput>()),
+                       {Field<float>(std::make_shared<bke::CurveLengthFieldInput>()),
                         params.extract_input<Field<float>>("Length")}));
 
     return Field<int>(std::move(get_count_op));
@@ -581,26 +545,6 @@ static Field<int> get_curve_count_field(GeoNodeExecParams params,
   return {};
 }
 
-/**
- * Create a selection field that removes curves without any evaluated points (invalid NURBS curves)
- * from the original selection provided to the node. This is here to simplify the sampling actual
- * resampling code.
- */
-static Field<bool> get_selection_field(GeoNodeExecParams params)
-{
-  static fn::CustomMF_SI_SI_SO<bool, int, bool> get_selection_fn(
-      "Create Curve Selection", [](const bool orig_selection, const int evaluated_points_num) {
-        return orig_selection && evaluated_points_num > 1;
-      });
-
-  auto selection_op = std::make_shared<FieldOperation>(
-      FieldOperation(get_selection_fn,
-                     {params.extract_input<Field<bool>>("Selection"),
-                      Field<int>(std::make_shared<EvaluatedCountFieldInput>())}));
-
-  return Field<bool>(std::move(selection_op));
-}
-
 static void node_geo_exec(GeoNodeExecParams params)
 {
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Curve");
@@ -608,7 +552,7 @@ static void node_geo_exec(GeoNodeExecParams params)
   const NodeGeometryCurveResample &storage = node_storage(params.node());
   const GeometryNodeCurveResampleMode mode = (GeometryNodeCurveResampleMode)storage.mode;
 
-  const Field<bool> selection = get_selection_field(params);
+  const Field<bool> selection = params.extract_input<Field<bool>>("Selection");
 
   switch (mode) {
     case GEO_NODE_CURVE_RESAMPLE_COUNT:

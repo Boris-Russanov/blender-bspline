@@ -85,6 +85,9 @@ static void copy_curves_geometry(CurvesGeometry &dst, const CurvesGeometry &src)
 
   dst.tag_topology_changed();
 
+  /* Though type counts are a cache, they must be copied because they are calculated eagerly. */
+  dst.runtime->type_counts = src.runtime->type_counts;
+
   dst.update_customdata_pointers();
 }
 
@@ -237,38 +240,42 @@ MutableSpan<int8_t> CurvesGeometry::curve_types_for_write()
   return get_mutable_attribute<int8_t>(*this, ATTR_DOMAIN_CURVE, ATTR_CURVE_TYPE);
 }
 
-bool CurvesGeometry::has_curve_with_type(const CurveType type) const
+void CurvesGeometry::fill_curve_types(const CurveType type)
 {
-  const VArray<int8_t> curve_types = this->curve_types();
-  if (curve_types.is_single()) {
-    return curve_types.get_internal_single() == type;
-  }
-  if (curve_types.is_span()) {
-    return curve_types.get_internal_span().contains(type);
-  }
-  /* The curves types array should be a single value or a span. */
-  BLI_assert_unreachable();
-  return false;
+  this->curve_types_for_write().fill(type);
+  this->runtime->type_counts.fill(0);
+  this->runtime->type_counts[type] = this->curves_num();
+  this->tag_topology_changed();
 }
 
-std::array<int, CURVE_TYPES_NUM> CurvesGeometry::count_curve_types() const
+void CurvesGeometry::fill_curve_types(const IndexMask selection, const CurveType type)
+{
+  if (selection.size() == this->curves_num()) {
+    this->fill_curve_types(type);
+    return;
+  }
+  /* A potential performance optimization is only counting the changed indices. */
+  this->curve_types_for_write().fill_indices(selection, type);
+  this->update_curve_types();
+  this->tag_topology_changed();
+}
+
+std::array<int, CURVE_TYPES_NUM> calculate_type_counts(const VArray<int8_t> &types)
 {
   using CountsType = std::array<int, CURVE_TYPES_NUM>;
+  CountsType counts;
+  counts.fill(0);
 
-  CountsType identity;
-  identity.fill(0);
-
-  const VArray<int8_t> types = this->curve_types();
   if (types.is_single()) {
-    identity[types.get_internal_single()] = this->curves_num();
-    return identity;
+    counts[types.get_internal_single()] = types.size();
+    return counts;
   }
 
   Span<int8_t> types_span = types.get_internal_span();
   return threading::parallel_reduce(
-      this->curves_range(),
+      types.index_range(),
       2048,
-      identity,
+      counts,
       [&](const IndexRange curves_range, const CountsType &init) {
         CountsType result = init;
         for (const int curve_index : curves_range) {
@@ -283,6 +290,11 @@ std::array<int, CURVE_TYPES_NUM> CurvesGeometry::count_curve_types() const
         }
         return result;
       });
+}
+
+void CurvesGeometry::update_curve_types()
+{
+  this->runtime->type_counts = calculate_type_counts(this->curve_types());
 }
 
 Span<float3> CurvesGeometry::positions() const
@@ -519,19 +531,19 @@ Span<int> CurvesGeometry::evaluated_offsets() const
 IndexMask CurvesGeometry::indices_for_curve_type(const CurveType type,
                                                  Vector<int64_t> &r_indices) const
 {
+  return this->indices_for_curve_type(type, this->curves_range(), r_indices);
+}
 
-  VArray<int8_t> types = this->curve_types();
-  if (types.is_single()) {
-    if (types.get_internal_single() == type) {
-      return IndexMask(types.size());
-    }
-    return {};
+IndexMask CurvesGeometry::indices_for_curve_type(const CurveType type,
+                                                 const IndexMask selection,
+                                                 Vector<int64_t> &r_indices) const
+{
+  if (this->curve_type_counts()[type] == this->curves_num()) {
+    return selection;
   }
-  Span<int8_t> types_span = types.get_internal_span();
+  Span<int8_t> types_span = this->curve_types().get_internal_span();
   return index_mask_ops::find_indices_based_on_predicate(
-      IndexMask(types.size()), 1024, r_indices, [&](const int index) {
-        return types_span[index] == type;
-      });
+      selection, 1024, r_indices, [&](const int index) { return types_span[index] == type; });
 }
 
 void CurvesGeometry::ensure_nurbs_basis_cache() const
@@ -568,6 +580,11 @@ void CurvesGeometry::ensure_nurbs_basis_cache() const
         const int8_t order = orders[curve_index];
         const bool is_cyclic = cyclic[curve_index];
         const KnotsMode mode = KnotsMode(knots_modes[curve_index]);
+
+        if (!curves::nurbs::check_valid_size_and_order(points.size(), order, is_cyclic, mode)) {
+          basis_caches[curve_index].invalid = true;
+          continue;
+        }
 
         const int knots_size = curves::nurbs::knots_size(points.size(), order, is_cyclic);
         Array<float> knots(knots_size);
@@ -688,9 +705,6 @@ Span<float3> CurvesGeometry::evaluated_tangents() const
     threading::parallel_for(this->curves_range(), 128, [&](IndexRange curves_range) {
       for (const int curve_index : curves_range) {
         const IndexRange evaluated_points = this->evaluated_points_for_curve(curve_index);
-        if (UNLIKELY(evaluated_points.is_empty())) {
-          continue;
-        }
         curves::poly::calculate_tangents(evaluated_positions.slice(evaluated_points),
                                          cyclic[curve_index],
                                          tangents.slice(evaluated_points));
@@ -765,9 +779,6 @@ Span<float3> CurvesGeometry::evaluated_normals() const
 
       for (const int curve_index : curves_range) {
         const IndexRange evaluated_points = this->evaluated_points_for_curve(curve_index);
-        if (UNLIKELY(evaluated_points.is_empty())) {
-          continue;
-        }
         switch (normal_mode[curve_index]) {
           case NORMAL_MODE_Z_UP:
             curves::poly::calculate_normals_z_up(evaluated_tangents.slice(evaluated_points),
@@ -908,9 +919,6 @@ void CurvesGeometry::ensure_evaluated_lengths() const
       for (const int curve_index : curves_range) {
         const bool cyclic = curves_cyclic[curve_index];
         const IndexRange evaluated_points = this->evaluated_points_for_curve(curve_index);
-        if (UNLIKELY(evaluated_points.is_empty())) {
-          continue;
-        }
         const IndexRange lengths_range = this->lengths_range_for_curve(curve_index, cyclic);
         length_parameterize::accumulate_lengths(evaluated_positions.slice(evaluated_points),
                                                 cyclic,
@@ -1187,6 +1195,8 @@ static CurvesGeometry copy_with_removed_curves(const CurvesGeometry &curves,
               });
         }
       });
+
+  new_curves.update_curve_types();
 
   return new_curves;
 }

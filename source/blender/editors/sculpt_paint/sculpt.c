@@ -5252,10 +5252,10 @@ bool SCULPT_handles_colors_report(SculptSession *ss, ReportList *reports)
     case PBVH_FACES:
       return true;
     case PBVH_BMESH:
-      BKE_report(reports, RPT_ERROR, "Not supported in dynamic topology mode.");
+      BKE_report(reports, RPT_ERROR, "Not supported in dynamic topology mode");
       return false;
     case PBVH_GRIDS:
-      BKE_report(reports, RPT_ERROR, "Not supported in multiresolution mode.");
+      BKE_report(reports, RPT_ERROR, "Not supported in multiresolution mode");
       return false;
   }
 
@@ -5447,8 +5447,11 @@ static int sculpt_brush_stroke_invoke(bContext *C, wmOperator *op, const wmEvent
   sculpt_brush_stroke_init(C, op);
 
   Object *ob = CTX_data_active_object(C);
+  Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
+  Brush *brush = BKE_paint_brush(&sd->paint);
 
-  if (!SCULPT_handles_colors_report(ob->sculpt, op->reports)) {
+  if (SCULPT_TOOL_NEEDS_COLOR(brush->sculpt_tool) &&
+      !SCULPT_handles_colors_report(ob->sculpt, op->reports)) {
     return OPERATOR_CANCELLED;
   }
 

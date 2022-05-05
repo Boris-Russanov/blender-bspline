@@ -618,7 +618,7 @@ typedef struct SpaceSeqRuntime {
   /** Stores lists of most recently displayed thumbnails. */
   struct GHash *last_displayed_thumbnails;
   int rename_channel_index;
-  char _pad0[4];
+  float timeline_clamp_custom_range;
 } SpaceSeqRuntime;
 
 /** Sequencer. */
@@ -691,7 +691,7 @@ typedef enum eSpaceSeq_Flag {
   SEQ_DRAWFRAMES = (1 << 0),
   SEQ_MARKER_TRANS = (1 << 1),
   SEQ_DRAW_COLOR_SEPARATED = (1 << 2),
-  SPACE_SEQ_FLAG_UNUSED_3 = (1 << 3),
+  SEQ_CLAMP_VIEW = (1 << 3),
   SPACE_SEQ_FLAG_UNUSED_4 = (1 << 4),
   SPACE_SEQ_FLAG_UNUSED_5 = (1 << 5),
   SEQ_USE_ALPHA = (1 << 6), /* use RGBA display mode for preview */
@@ -1223,7 +1223,8 @@ typedef struct SpaceImage {
   char dt_uvstretch;
   char around;
 
-  char _pad1[4];
+  char gizmo_flag;
+  char _pad1[3];
 
   int flag;
 
@@ -1320,6 +1321,13 @@ typedef enum eSpaceImageOverlay_Flag {
   SI_OVERLAY_SHOW_OVERLAYS = (1 << 0),
   SI_OVERLAY_SHOW_GRID_BACKGROUND = (1 << 1),
 } eSpaceImageOverlay_Flag;
+
+/** #SpaceImage.gizmo_flag */
+enum {
+  /** All gizmos. */
+  SI_GIZMO_HIDE = (1 << 0),
+  SI_GIZMO_HIDE_NAVIGATE = (1 << 1),
+};
 
 /** Keep in sync with `STEPS_LEN` in `grid_frag.glsl`. */
 #define SI_GRID_STEPS_LEN 8

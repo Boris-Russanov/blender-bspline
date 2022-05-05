@@ -1215,7 +1215,7 @@ static void object_asset_pre_save(void *asset_ptr, struct AssetMetaData *asset_d
   }
 }
 
-AssetTypeInfo AssetType_OB = {
+static AssetTypeInfo AssetType_OB = {
     /* pre_save_fn */ object_asset_pre_save,
 };
 
@@ -1789,6 +1789,7 @@ void BKE_object_free_derived_caches(Object *ob)
         BKE_mesh_eval_delete((Mesh *)data_eval);
       }
       else {
+        BKE_libblock_free_data(data_eval, false);
         BKE_libblock_free_datablock(data_eval, 0);
         MEM_freeN(data_eval);
       }
@@ -2113,7 +2114,7 @@ static const char *get_obdata_defname(int type)
     case OB_SPEAKER:
       return DATA_("Speaker");
     case OB_CURVES:
-      return DATA_("HairCurves");
+      return DATA_("Curves");
     case OB_POINTCLOUD:
       return DATA_("PointCloud");
     case OB_VOLUME:
@@ -3255,10 +3256,9 @@ static void give_parvert(Object *par, int nr, float vec[3])
   else if (ELEM(par->type, OB_CURVES_LEGACY, OB_SURF)) {
     ListBase *nurb;
 
-    /* Unless there's some weird depsgraph failure the cache should exist. */
-    BLI_assert(par->runtime.curve_cache != nullptr);
-
-    if (par->runtime.curve_cache->deformed_nurbs.first != nullptr) {
+    /* It is possible that a cycle in the dependency graph was resolved in a way that caused this
+     * object to be evaluated before its dependencies. In this case the curve cache may be null. */
+    if (par->runtime.curve_cache && par->runtime.curve_cache->deformed_nurbs.first != nullptr) {
       nurb = &par->runtime.curve_cache->deformed_nurbs;
     }
     else {

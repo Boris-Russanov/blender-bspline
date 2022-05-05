@@ -79,8 +79,8 @@ set(SRC
   intern/kdtree_3d.c
   intern/kdtree_4d.c
   intern/lasso_2d.c
-  intern/listbase.c
   intern/length_parameterize.cc
+  intern/listbase.c
   intern/math_base.c
   intern/math_base_inline.c
   intern/math_base_safe_inline.c
@@ -180,6 +180,7 @@ set(SRC
   BLI_cpp_type.hh
   BLI_cpp_type_make.hh
   BLI_delaunay_2d.h
+  BLI_devirtualize_parameters.hh
   BLI_dial_2d.h
   BLI_disjoint_set.hh
   BLI_dlrbTree.h
@@ -273,6 +274,7 @@ set(SRC
   BLI_multi_value_map.hh
   BLI_noise.h
   BLI_noise.hh
+  BLI_parameter_pack_utils.hh
   BLI_path_util.h
   BLI_polyfill_2d.h
   BLI_polyfill_2d_beautify.h

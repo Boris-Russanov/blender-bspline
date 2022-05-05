@@ -486,7 +486,7 @@ if((UNIX AND NOT APPLE) OR (CMAKE_GENERATOR MATCHES "^Visual Studio.+"))
 endif()
 
 option(WITH_BOOST "Enable features depending on boost" ON)
-option(WITH_TBB   "Enable features depending on TBB (OpenVDB, OpenImageDenoise, sculpt multithreading)" ON)
+option(WITH_TBB   "Enable multithreading. TBB is also required for features such as Cycles, OpenVDB and USD" ON)
 
 # TBB malloc is only supported on for windows currently
 if(WIN32)
@@ -805,6 +805,9 @@ set_and_warn_dependency(WITH_IMAGE_OPENEXR WITH_OPENCOLORIO  OFF)
 
 # Haru needs `TIFFFaxBlackCodes` & `TIFFFaxWhiteCodes` symbols from TIFF.
 set_and_warn_dependency(WITH_IMAGE_TIFF WITH_HARU       OFF)
+
+# USD needs OpenSubDiv, since that is used by the Cycles Hydra render delegate.
+set_and_warn_dependency(WITH_OPENSUBDIV WITH_USD        OFF)
 
 # auto enable openimageio for cycles
 if(WITH_CYCLES)
