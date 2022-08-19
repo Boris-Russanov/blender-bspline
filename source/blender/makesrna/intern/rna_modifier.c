@@ -7251,9 +7251,9 @@ static void rna_def_modifier_b_spline(BlenderRNA *brna)
   
   
   // There will be such a block for each data field of BsplineModifierData
-  prop = RNA_def_property(srna, "degree", PROP_INT, PROP_NONE);          //name to give
-  RNA_def_property_int_sdna(prop, NULL, "degree");                          //var name in modifier data
-  RNA_def_property_ui_text(prop, "Degree", "The Degree of the Polyhedrial spline");
+  prop = RNA_def_property(srna, "resolution", PROP_INT, PROP_NONE);          	//name to give
+  RNA_def_property_int_sdna(prop, NULL, "resolution");                          //var name in modifier data
+  RNA_def_property_ui_text(prop, "Resolution", "The resolution of the polyhedral spline.");
   RNA_def_property_range(prop, 1, 6);
   RNA_def_property_ui_range(prop, 1, 6, 1, -1);
   RNA_def_property_update(prop, 0, "rna_Modifier_update");

@@ -2393,12 +2393,13 @@ typedef struct BsplineModifierData {	//struct for Bspline mod data.
   ModifierData modifier;
   //add extra stuff here make sure it's in groups of eight bytes.
   struct Object *obj;
-  int degree;
+  unsigned int *arr;	//short b4
+  int resolution;
   short applied;
-  char _pad[2];
-  void *_pad0;
+  char _pad0[2];
+  //void *_pad1;
   //always name to pad as: char _pad[#];
-} BsplineModifierData;
+} BsplineModifierData;	//seems 2 pointers cancel out...
 
 #ifdef __cplusplus
 }

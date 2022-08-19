@@ -71,7 +71,8 @@
 #define _DNA_DEFAULT_BsplineModifierData \
   { \
 	.obj = NULL, \
-    .degree = 1, \
+	.arr = NULL, \
+    .resolution = 1, \
 	.applied = 0 \
   }
 
