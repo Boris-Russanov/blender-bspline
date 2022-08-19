@@ -160,7 +160,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
     DEG_add_object_relation(ctx->node, mmd->object, DEG_OB_COMP_GEOMETRY, "Mesh Deform Modifier");
   }
   /* We need own transformation as well. */
-  DEG_add_modifier_to_transform_relation(ctx->node, "Mesh Deform Modifier");
+  DEG_add_depends_on_transform_relation(ctx->node, "Mesh Deform Modifier");
 }
 
 static float meshdeform_dynamic_bind(MeshDeformModifierData *mmd, float (*dco)[3], float vec[3])
@@ -353,7 +353,7 @@ static void meshdeformModifier_do(ModifierData *md,
    * We'll support this case once granular dependency graph is landed.
    */
   Object *ob_target = mmd->object;
-  cagemesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target, false);
+  cagemesh = BKE_modifier_get_evaluated_mesh_from_evaluated_object(ob_target);
   if (cagemesh == NULL) {
     BKE_modifier_set_error(ctx->object, md, "Cannot get mesh from cage object");
     return;
@@ -444,8 +444,7 @@ static void deformVerts(ModifierData *md,
                         float (*vertexCos)[3],
                         int verts_num)
 {
-  Mesh *mesh_src = MOD_deform_mesh_eval_get(
-      ctx->object, NULL, mesh, NULL, verts_num, false, false);
+  Mesh *mesh_src = MOD_deform_mesh_eval_get(ctx->object, NULL, mesh, NULL, verts_num, false);
 
   MOD_previous_vcos_store(md, vertexCos); /* if next modifier needs original vertices */
 
@@ -463,10 +462,9 @@ static void deformVertsEM(ModifierData *md,
                           float (*vertexCos)[3],
                           int verts_num)
 {
-  Mesh *mesh_src = MOD_deform_mesh_eval_get(
-      ctx->object, editData, mesh, NULL, verts_num, false, false);
+  Mesh *mesh_src = MOD_deform_mesh_eval_get(ctx->object, editData, mesh, NULL, verts_num, false);
 
-  /* TODO(Campbell): use edit-mode data only (remove this line). */
+  /* TODO(@campbellbarton): use edit-mode data only (remove this line). */
   if (mesh_src != NULL) {
     BKE_mesh_wrapper_ensure_mdata(mesh_src);
   }
@@ -581,17 +579,50 @@ static void panelRegister(ARegionType *region_type)
   modifier_panel_register(region_type, eModifierType_MeshDeform, panel_draw);
 }
 
-static void blendWrite(BlendWriter *writer, const ModifierData *md)
+static void blendWrite(BlendWriter *writer, const ID *id_owner, const ModifierData *md)
 {
-  MeshDeformModifierData *mmd = (MeshDeformModifierData *)md;
-  int size = mmd->dyngridsize;
+  MeshDeformModifierData mmd = *(const MeshDeformModifierData *)md;
+  const bool is_undo = BLO_write_is_undo(writer);
 
-  BLO_write_struct_array(writer, MDefInfluence, mmd->influences_num, mmd->bindinfluences);
-  BLO_write_int32_array(writer, mmd->verts_num + 1, mmd->bindoffsets);
-  BLO_write_float3_array(writer, mmd->cage_verts_num, mmd->bindcagecos);
-  BLO_write_struct_array(writer, MDefCell, size * size * size, mmd->dyngrid);
-  BLO_write_struct_array(writer, MDefInfluence, mmd->influences_num, mmd->dyninfluences);
-  BLO_write_int32_array(writer, mmd->verts_num, mmd->dynverts);
+  if (ID_IS_OVERRIDE_LIBRARY(id_owner) && !is_undo) {
+    BLI_assert(!ID_IS_LINKED(id_owner));
+    const bool is_local = (md->flag & eModifierFlag_OverrideLibrary_Local) != 0;
+    if (!is_local) {
+      /* Modifier coming from linked data cannot be bound from an override, so we can remove all
+       * binding data, can save a significant amount of memory. */
+      mmd.influences_num = 0;
+      mmd.bindinfluences = NULL;
+      mmd.verts_num = 0;
+      mmd.bindoffsets = NULL;
+      mmd.cage_verts_num = 0;
+      mmd.bindcagecos = NULL;
+      mmd.dyngridsize = 0;
+      mmd.dyngrid = NULL;
+      mmd.influences_num = 0;
+      mmd.dyninfluences = NULL;
+      mmd.dynverts = NULL;
+    }
+  }
+
+  const int size = mmd.dyngridsize;
+
+  BLO_write_struct_at_address(writer, MeshDeformModifierData, md, &mmd);
+
+  BLO_write_struct_array(writer, MDefInfluence, mmd.influences_num, mmd.bindinfluences);
+
+  /* NOTE: `bindoffset` is abusing `verts_num + 1` as its size, this becomes an incorrect value in
+   * case `verts_num == 0`, since `bindoffset` is then NULL, not a size 1 allocated array. */
+  if (mmd.verts_num > 0) {
+    BLO_write_int32_array(writer, mmd.verts_num + 1, mmd.bindoffsets);
+  }
+  else {
+    BLI_assert(mmd.bindoffsets == NULL);
+  }
+
+  BLO_write_float3_array(writer, mmd.cage_verts_num, mmd.bindcagecos);
+  BLO_write_struct_array(writer, MDefCell, size * size * size, mmd.dyngrid);
+  BLO_write_struct_array(writer, MDefInfluence, mmd.influences_num, mmd.dyninfluences);
+  BLO_write_int32_array(writer, mmd.verts_num, mmd.dynverts);
 }
 
 static void blendRead(BlendDataReader *reader, ModifierData *md)
@@ -599,7 +630,13 @@ static void blendRead(BlendDataReader *reader, ModifierData *md)
   MeshDeformModifierData *mmd = (MeshDeformModifierData *)md;
 
   BLO_read_data_address(reader, &mmd->bindinfluences);
-  BLO_read_int32_array(reader, mmd->verts_num + 1, &mmd->bindoffsets);
+
+  /* NOTE: `bindoffset` is abusing `verts_num + 1` as its size, this becomes an incorrect value in
+   * case `verts_num == 0`, since `bindoffset` is then NULL, not a size 1 allocated array. */
+  if (mmd->verts_num > 0) {
+    BLO_read_int32_array(reader, mmd->verts_num + 1, &mmd->bindoffsets);
+  }
+
   BLO_read_float3_array(reader, mmd->cage_verts_num, &mmd->bindcagecos);
   BLO_read_data_address(reader, &mmd->dyngrid);
   BLO_read_data_address(reader, &mmd->dyninfluences);
@@ -611,7 +648,7 @@ static void blendRead(BlendDataReader *reader, ModifierData *md)
 }
 
 ModifierTypeInfo modifierType_MeshDeform = {
-    /* name */ "MeshDeform",
+    /* name */ N_("MeshDeform"),
     /* structName */ "MeshDeformModifierData",
     /* structSize */ sizeof(MeshDeformModifierData),
     /* srna */ &RNA_MeshDeformModifier,

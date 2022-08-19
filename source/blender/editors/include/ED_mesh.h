@@ -137,14 +137,16 @@ void EDBM_update_extern(struct Mesh *me, bool do_tessellation, bool is_destructi
  */
 struct UvElementMap *BM_uv_element_map_create(struct BMesh *bm,
                                               const struct Scene *scene,
-                                              bool face_selected,
                                               bool uv_selected,
                                               bool use_winding,
                                               bool do_islands);
 void BM_uv_element_map_free(struct UvElementMap *element_map);
-struct UvElement *BM_uv_element_get(struct UvElementMap *map,
-                                    struct BMFace *efa,
-                                    struct BMLoop *l);
+struct UvElement *BM_uv_element_get(const struct UvElementMap *map,
+                                    const struct BMFace *efa,
+                                    const struct BMLoop *l);
+struct UvElement *BM_uv_element_get_head(struct UvElementMap *map, struct UvElement *child);
+
+struct UvElement **BM_uv_element_map_ensure_head_table(struct UvElementMap *element_map);
 
 /**
  * Can we edit UV's for this mesh?
@@ -384,13 +386,16 @@ void ED_operatormacros_mesh(void);
  */
 void ED_keymap_mesh(struct wmKeyConfig *keyconf);
 
-/* editface.c */
+/* editface.cc */
 
 /**
  * Copy the face flags, most importantly selection from the mesh to the final derived mesh,
  * use in object mode when selecting faces (while painting).
  */
-void paintface_flush_flags(struct bContext *C, struct Object *ob, short flag);
+void paintface_flush_flags(struct bContext *C,
+                           struct Object *ob,
+                           bool flush_selection,
+                           bool flush_hidden);
 /**
  * \return True when pick finds an element or the selection changed.
  */
@@ -425,6 +430,9 @@ void paintvert_select_ungrouped(struct Object *ob, bool extend, bool flush_flags
 void paintvert_flush_flags(struct Object *ob);
 void paintvert_tag_select_update(struct bContext *C, struct Object *ob);
 
+void paintvert_hide(struct bContext *C, struct Object *ob, bool unselected);
+void paintvert_reveal(struct bContext *C, struct Object *ob, bool select);
+
 /* mirrtopo */
 typedef struct MirrTopoStore_t {
   intptr_t *index_lookup;
@@ -442,7 +450,7 @@ void ED_mesh_mirrtopo_init(struct BMEditMesh *em,
                            bool skip_em_vert_array_init);
 void ED_mesh_mirrtopo_free(MirrTopoStore_t *mesh_topo_store);
 
-/* object_vgroup.c */
+/* object_vgroup.cc */
 
 #define WEIGHT_REPLACE 1
 #define WEIGHT_ADD 2
@@ -520,7 +528,7 @@ float ED_vgroup_vert_weight(struct Object *ob, struct bDeformGroup *dg, int vert
  */
 void ED_vgroup_vert_active_mirror(struct Object *ob, int def_nr);
 
-/* mesh_data.c */
+/* mesh_data.cc */
 
 void ED_mesh_verts_add(struct Mesh *mesh, struct ReportList *reports, int count);
 void ED_mesh_edges_add(struct Mesh *mesh, struct ReportList *reports, int count);
@@ -536,12 +544,12 @@ void ED_mesh_geometry_clear(struct Mesh *mesh);
 
 void ED_mesh_update(struct Mesh *mesh, struct bContext *C, bool calc_edges, bool calc_edges_loose);
 
-void ED_mesh_uv_texture_ensure(struct Mesh *me, const char *name);
-int ED_mesh_uv_texture_add(
+void ED_mesh_uv_ensure(struct Mesh *me, const char *name);
+int ED_mesh_uv_add(
     struct Mesh *me, const char *name, bool active_set, bool do_init, struct ReportList *reports);
-bool ED_mesh_uv_texture_remove_index(struct Mesh *me, int n);
-bool ED_mesh_uv_texture_remove_active(struct Mesh *me);
-bool ED_mesh_uv_texture_remove_named(struct Mesh *me, const char *name);
+bool ED_mesh_uv_remove_index(struct Mesh *me, int n);
+bool ED_mesh_uv_remove_active(struct Mesh *me);
+bool ED_mesh_uv_remove_named(struct Mesh *me, const char *name);
 void ED_mesh_uv_loop_reset(struct bContext *C, struct Mesh *me);
 /**
  * Without a #bContext, called when UV-editing.
@@ -550,16 +558,10 @@ void ED_mesh_uv_loop_reset_ex(struct Mesh *me, int layernum);
 bool ED_mesh_color_ensure(struct Mesh *me, const char *name);
 int ED_mesh_color_add(
     struct Mesh *me, const char *name, bool active_set, bool do_init, struct ReportList *reports);
-bool ED_mesh_color_remove_index(struct Mesh *me, int n);
-bool ED_mesh_color_remove_active(struct Mesh *me);
-bool ED_mesh_color_remove_named(struct Mesh *me, const char *name);
-
-bool ED_mesh_sculpt_color_ensure(struct Mesh *me, const char *name);
-int ED_mesh_sculpt_color_add(
-    struct Mesh *me, const char *name, bool active_set, bool do_init, struct ReportList *reports);
-bool ED_mesh_sculpt_color_remove_index(struct Mesh *me, int n);
-bool ED_mesh_sculpt_color_remove_active(struct Mesh *me);
-bool ED_mesh_sculpt_color_remove_named(struct Mesh *me, const char *name);
+int ED_mesh_sculpt_color_add(struct Mesh *me,
+                             const char *name,
+                             bool do_init,
+                             struct ReportList *reports);
 
 void ED_mesh_report_mirror(struct wmOperator *op, int totmirr, int totfail);
 void ED_mesh_report_mirror_ex(struct wmOperator *op, int totmirr, int totfail, char selectmode);
@@ -591,7 +593,7 @@ void EDBM_redo_state_restore_and_free(struct BMBackup *backup,
                                       bool recalc_looptri) ATTR_NONNULL(1, 2);
 void EDBM_redo_state_free(struct BMBackup *backup) ATTR_NONNULL(1);
 
-/* *** meshtools.c *** */
+/* *** meshtools.cc *** */
 
 int ED_mesh_join_objects_exec(struct bContext *C, struct wmOperator *op);
 int ED_mesh_shapes_join_objects_exec(struct bContext *C, struct wmOperator *op);

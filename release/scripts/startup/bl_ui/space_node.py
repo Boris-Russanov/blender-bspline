@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-
-# <pep8 compliant>
 import bpy
 from bpy.types import Header, Menu, Panel
-from bpy.app.translations import pgettext_iface as iface_
-from bpy.app.translations import contexts as i18n_contexts
+from bpy.app.translations import (
+    pgettext_iface as iface_,
+    contexts as i18n_contexts,
+)
 from bl_ui.utils import PresetPanel
 from bl_ui.properties_grease_pencil_common import (
     AnnotationDataPanel,
@@ -377,8 +377,8 @@ class NODE_PT_material_slots(Panel):
     def draw_header(self, context):
         ob = context.object
         self.bl_label = (
-            "Slot " + str(ob.active_material_index + 1) if ob.material_slots else
-            "Slot"
+            iface_("Slot %d") % (ob.active_material_index + 1) if ob.material_slots else
+            iface_("Slot")
         )
 
     # Duplicate part of 'EEVEE_MATERIAL_PT_context_material'.
@@ -727,7 +727,20 @@ class NODE_UL_interface_sockets(bpy.types.UIList):
             layout.template_node_socket(color=color)
 
 
-class NodeTreeInterfacePanel:
+class NodeTreeInterfacePanel(Panel):
+
+    @classmethod
+    def poll(cls, context):
+        snode = context.space_data
+        if snode is None:
+            return False
+        tree = snode.edit_tree
+        if tree is None:
+            return False
+        if tree.is_embedded_data:
+            return False
+        return True
+
     def draw_socket_list(self, context, in_out, sockets_propname, active_socket_propname):
         layout = self.layout
 
@@ -804,31 +817,21 @@ class NodeTreeInterfacePanel:
             active_socket.draw(context, layout)
 
 
-class NODE_PT_node_tree_interface_inputs(NodeTreeInterfacePanel, Panel):
+class NODE_PT_node_tree_interface_inputs(NodeTreeInterfacePanel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
     bl_category = "Group"
     bl_label = "Inputs"
 
-    @classmethod
-    def poll(cls, context):
-        snode = context.space_data
-        return snode.edit_tree is not None
-
     def draw(self, context):
         self.draw_socket_list(context, "IN", "inputs", "active_input")
 
 
-class NODE_PT_node_tree_interface_outputs(NodeTreeInterfacePanel, Panel):
+class NODE_PT_node_tree_interface_outputs(NodeTreeInterfacePanel):
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
     bl_category = "Group"
     bl_label = "Outputs"
-
-    @classmethod
-    def poll(cls, context):
-        snode = context.space_data
-        return snode.edit_tree is not None
 
     def draw(self, context):
         self.draw_socket_list(context, "OUT", "outputs", "active_output")

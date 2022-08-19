@@ -9,7 +9,7 @@
 
 #include "BKE_mesh.h"
 
-#include "extract_mesh.h"
+#include "extract_mesh.hh"
 
 #include "draw_subdivision.h"
 
@@ -20,7 +20,7 @@ namespace blender::draw {
  * \{ */
 
 static void extract_edituv_stretch_area_init(const MeshRenderData *mr,
-                                             struct MeshBatchCache *UNUSED(cache),
+                                             MeshBatchCache *UNUSED(cache),
                                              void *buf,
                                              void *UNUSED(tls_data))
 {
@@ -72,7 +72,7 @@ static void compute_area_ratio(const MeshRenderData *mr,
     }
   }
   else {
-    BLI_assert(ELEM(mr->extract_type, MR_EXTRACT_MAPPED, MR_EXTRACT_MESH));
+    BLI_assert(mr->extract_type == MR_EXTRACT_MESH);
     const MLoopUV *uv_data = (const MLoopUV *)CustomData_get_layer(&mr->me->ldata, CD_MLOOPUV);
     const MPoly *mp = mr->mpoly;
     for (int mp_index = 0; mp_index < mr->poly_len; mp_index++, mp++) {
@@ -89,7 +89,7 @@ static void compute_area_ratio(const MeshRenderData *mr,
 }
 
 static void extract_edituv_stretch_area_finish(const MeshRenderData *mr,
-                                               struct MeshBatchCache *cache,
+                                               MeshBatchCache *cache,
                                                void *buf,
                                                void *UNUSED(data))
 {
@@ -117,7 +117,7 @@ static void extract_edituv_stretch_area_finish(const MeshRenderData *mr,
     }
   }
   else {
-    BLI_assert(ELEM(mr->extract_type, MR_EXTRACT_MAPPED, MR_EXTRACT_MESH));
+    BLI_assert(mr->extract_type == MR_EXTRACT_MESH);
     const MPoly *mp = mr->mpoly;
     for (int mp_index = 0, l_index = 0; mp_index < mr->poly_len; mp_index++, mp++) {
       for (int i = 0; i < mp->totloop; i++, l_index++) {
@@ -131,7 +131,7 @@ static void extract_edituv_stretch_area_finish(const MeshRenderData *mr,
 
 static void extract_edituv_stretch_area_init_subdiv(const DRWSubdivCache *subdiv_cache,
                                                     const MeshRenderData *mr,
-                                                    struct MeshBatchCache *cache,
+                                                    MeshBatchCache *cache,
                                                     void *buffer,
                                                     void *UNUSED(data))
 {
@@ -180,7 +180,5 @@ constexpr MeshExtract create_extractor_edituv_stretch_area()
 
 }  // namespace blender::draw
 
-extern "C" {
 const MeshExtract extract_edituv_stretch_area =
     blender::draw::create_extractor_edituv_stretch_area();
-}

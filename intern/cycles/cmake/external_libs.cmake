@@ -91,6 +91,8 @@ if(CYCLES_STANDALONE_REPOSITORY)
     _set_default(USD_ROOT_DIR "${_cycles_lib_dir}/usd")
     _set_default(WEBP_ROOT_DIR "${_cycles_lib_dir}/webp")
     _set_default(ZLIB_ROOT "${_cycles_lib_dir}/zlib")
+    _set_default(LEVEL_ZERO_ROOT_DIR "${_cycles_lib_dir}/level-zero")
+    _set_default(SYCL_ROOT_DIR "${_cycles_lib_dir}/dpcpp")
 
     # Ignore system libraries
     set(CMAKE_IGNORE_PATH "${CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES};${CMAKE_SYSTEM_INCLUDE_PATH};${CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES};${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES}")
@@ -145,8 +147,8 @@ if(CYCLES_STANDALONE_REPOSITORY)
       -DOIIO_STATIC_DEFINE
     )
 
-    set(OPENIMAGEIO_INCLUDE_DIR ${OPENIMAGEIO_ROOT_DIR}/include) 
-    set(OPENIMAGEIO_INCLUDE_DIRS ${OPENIMAGEIO_INCLUDE_DIR} ${OPENIMAGEIO_INCLUDE_DIR}/OpenImageIO) 
+    set(OPENIMAGEIO_INCLUDE_DIR ${OPENIMAGEIO_ROOT_DIR}/include)
+    set(OPENIMAGEIO_INCLUDE_DIRS ${OPENIMAGEIO_INCLUDE_DIR} ${OPENIMAGEIO_INCLUDE_DIR}/OpenImageIO)
     # Special exceptions for libraries which needs explicit debug version
     set(OPENIMAGEIO_LIBRARIES
       optimized ${OPENIMAGEIO_ROOT_DIR}/lib/OpenImageIO.lib
@@ -503,26 +505,19 @@ if(CYCLES_STANDALONE_REPOSITORY)
 endif()
 
 ###########################################################################
-# GLEW
+# Epoxy
 ###########################################################################
 
 if(CYCLES_STANDALONE_REPOSITORY)
   if((WITH_CYCLES_STANDALONE AND WITH_CYCLES_STANDALONE_GUI) OR
      WITH_CYCLES_HYDRA_RENDER_DELEGATE)
     if(MSVC AND EXISTS ${_cycles_lib_dir})
-      set(GLEW_LIBRARY "${_cycles_lib_dir}/opengl/lib/glew.lib")
-      set(GLEW_INCLUDE_DIR "${_cycles_lib_dir}/opengl/include")
-      add_definitions(-DGLEW_STATIC)
+      set(Epoxy_LIBRARIES "${_cycles_lib_dir}/epoxy/lib/epoxy.lib")
+      set(Epoxy_INCLUDE_DIRS "${_cycles_lib_dir}/epoxy/include")
     else()
-      find_package(GLEW REQUIRED)
+      find_package(Epoxy REQUIRED)
     endif()
-
-    set(CYCLES_GLEW_LIBRARIES ${GLEW_LIBRARY})
   endif()
-else()
-  # Workaround for unconventional variable name use in Blender.
-  set(GLEW_INCLUDE_DIR "${GLEW_INCLUDE_PATH}")
-  set(CYCLES_GLEW_LIBRARIES bf_intern_glew_mx ${BLENDER_GLEW_LIBRARIES})
 endif()
 
 ###########################################################################
@@ -552,25 +547,6 @@ endif()
 if(EXISTS ${_cycles_lib_dir})
   unset(CMAKE_IGNORE_PATH)
   unset(_cycles_lib_dir)
-endif()
-
-###########################################################################
-# OpenGL
-###########################################################################
-
-if((WITH_CYCLES_STANDALONE AND WITH_CYCLES_STANDALONE_GUI) OR
-   WITH_CYCLES_HYDRA_RENDER_DELEGATE)
-  if(CYCLES_STANDALONE_REPOSITORY)
-    if(NOT DEFINED OpenGL_GL_PREFERENCE)
-      set(OpenGL_GL_PREFERENCE "LEGACY")
-    endif()
-
-    find_package(OpenGL REQUIRED)
-
-    set(CYCLES_GL_LIBRARIES ${OPENGL_gl_LIBRARY})
-  else()
-    set(CYCLES_GL_LIBRARIES ${BLENDER_GL_LIBRARIES})
-  endif()
 endif()
 
 ###########################################################################
@@ -647,3 +623,22 @@ if(WITH_CYCLES_DEVICE_METAL)
     message(STATUS "Found Metal: ${METAL_LIBRARY}")
   endif()
 endif()
+
+###########################################################################
+# oneAPI
+###########################################################################
+
+if (WITH_CYCLES_DEVICE_ONEAPI)
+  find_package(SYCL)
+  find_package(LevelZero)
+
+  if (SYCL_FOUND AND LEVEL_ZERO_FOUND)
+    message(STATUS "Found oneAPI: ${SYCL_LIBRARY}")
+    message(STATUS "Found Level Zero: ${LEVEL_ZERO_LIBRARY}")
+  else()
+    message(STATUS "oneAPI or Level Zero not found, disabling oneAPI device from Cycles")
+    set(WITH_CYCLES_DEVICE_ONEAPI OFF)
+  endif()
+endif()
+
+unset(_cycles_lib_dir)

@@ -10,9 +10,9 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device float3 integrator_eval_background_shader(KernelGlobals kg,
-                                                    IntegratorState state,
-                                                    ccl_global float *ccl_restrict render_buffer)
+ccl_device Spectrum integrator_eval_background_shader(KernelGlobals kg,
+                                                      IntegratorState state,
+                                                      ccl_global float *ccl_restrict render_buffer)
 {
 #ifdef __BACKGROUND__
   const int shader = kernel_data.background.surface_shader;
@@ -26,11 +26,11 @@ ccl_device float3 integrator_eval_background_shader(KernelGlobals kg,
         ((shader & SHADER_EXCLUDE_TRANSMIT) && (path_flag & PATH_RAY_TRANSMIT)) ||
         ((shader & SHADER_EXCLUDE_CAMERA) && (path_flag & PATH_RAY_CAMERA)) ||
         ((shader & SHADER_EXCLUDE_SCATTER) && (path_flag & PATH_RAY_VOLUME_SCATTER)))
-      return zero_float3();
+      return zero_spectrum();
   }
 
   /* Use fast constant background color if available. */
-  float3 L = zero_float3();
+  Spectrum L = zero_spectrum();
   if (!shader_constant_emission_eval(kg, shader, &L)) {
     /* Evaluate background shader. */
 
@@ -48,7 +48,7 @@ ccl_device float3 integrator_eval_background_shader(KernelGlobals kg,
 
     PROFILING_SHADER(emission_sd->object, emission_sd->shader);
     PROFILING_EVENT(PROFILING_SHADE_LIGHT_EVAL);
-    shader_eval_surface<KERNEL_FEATURE_NODE_MASK_SURFACE_LIGHT>(
+    shader_eval_surface<KERNEL_FEATURE_NODE_MASK_SURFACE_BACKGROUND>(
         kg, state, emission_sd, render_buffer, path_flag | PATH_RAY_EMISSION);
 
     L = shader_background_eval(emission_sd);
@@ -62,11 +62,10 @@ ccl_device float3 integrator_eval_background_shader(KernelGlobals kg,
     const float3 ray_P = INTEGRATOR_STATE(state, ray, P);
     const float3 ray_D = INTEGRATOR_STATE(state, ray, D);
     const float mis_ray_pdf = INTEGRATOR_STATE(state, path, mis_ray_pdf);
-    const float mis_ray_t = INTEGRATOR_STATE(state, path, mis_ray_t);
 
     /* multiple importance sampling, get background light pdf for ray
      * direction, and compute weight with respect to BSDF pdf */
-    const float pdf = background_light_pdf(kg, ray_P - ray_D * mis_ray_t, ray_D);
+    const float pdf = background_light_pdf(kg, ray_P, ray_D);
     const float mis_weight = light_sample_mis_weight_forward(kg, mis_ray_pdf, pdf);
     L *= mis_weight;
   }
@@ -74,7 +73,7 @@ ccl_device float3 integrator_eval_background_shader(KernelGlobals kg,
 
   return L;
 #else
-  return make_float3(0.8f, 0.8f, 0.8f);
+  return make_spectrum(0.8f);
 #endif
 }
 
@@ -107,7 +106,7 @@ ccl_device_inline void integrate_background(KernelGlobals kg,
       for (int lamp = 0; lamp < kernel_data.integrator.num_all_lights; lamp++) {
         /* This path should have been resolved with mnee, it will
          * generate a firefly for small lights since it is improbable. */
-        const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
+        const ccl_global KernelLight *klight = &kernel_data_fetch(lights, lamp);
         if (klight->type == LIGHT_BACKGROUND && klight->use_caustics) {
           eval_background = false;
           break;
@@ -118,8 +117,8 @@ ccl_device_inline void integrate_background(KernelGlobals kg,
 #endif /* __MNEE__ */
 
   /* Evaluate background shader. */
-  float3 L = (eval_background) ? integrator_eval_background_shader(kg, state, render_buffer) :
-                                 zero_float3();
+  Spectrum L = (eval_background) ? integrator_eval_background_shader(kg, state, render_buffer) :
+                                   zero_spectrum();
 
   /* When using the ao bounces approximation, adjust background
    * shader intensity with ao factor. */
@@ -160,7 +159,7 @@ ccl_device_inline void integrate_distant_lights(KernelGlobals kg,
       if (INTEGRATOR_STATE(state, path, mnee) & PATH_MNEE_CULL_LIGHT_CONNECTION) {
         /* This path should have been resolved with mnee, it will
          * generate a firefly for small lights since it is improbable. */
-        const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
+        const ccl_global KernelLight *klight = &kernel_data_fetch(lights, lamp);
         if (klight->use_caustics)
           return;
       }
@@ -170,7 +169,7 @@ ccl_device_inline void integrate_distant_lights(KernelGlobals kg,
       /* TODO: does aliasing like this break automatic SoA in CUDA? */
       ShaderDataTinyStorage emission_sd_storage;
       ccl_private ShaderData *emission_sd = AS_SHADER_DATA(&emission_sd_storage);
-      float3 light_eval = light_sample_shader_eval(kg, state, emission_sd, &ls, ray_time);
+      Spectrum light_eval = light_sample_shader_eval(kg, state, emission_sd, &ls, ray_time);
       if (is_zero(light_eval)) {
         return;
       }
@@ -185,7 +184,7 @@ ccl_device_inline void integrate_distant_lights(KernelGlobals kg,
       }
 
       /* Write to render buffer. */
-      const float3 throughput = INTEGRATOR_STATE(state, path, throughput);
+      const Spectrum throughput = INTEGRATOR_STATE(state, path, throughput);
       kernel_accum_emission(
           kg, state, throughput * light_eval, render_buffer, kernel_data.background.lightgroup);
     }
@@ -213,7 +212,7 @@ ccl_device void integrator_shade_background(KernelGlobals kg,
   }
 #endif
 
-  INTEGRATOR_PATH_TERMINATE(DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND);
+  integrator_path_terminate(kg, state, DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND);
 }
 
 CCL_NAMESPACE_END

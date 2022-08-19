@@ -89,6 +89,10 @@ void DRW_volume_free(void)
 
 static GPUTexture *grid_default_texture(eGPUDefaultValue default_value)
 {
+  if (g_data.dummy_one == nullptr) {
+    drw_volume_globals_init();
+  }
+
   switch (default_value) {
     case GPU_DEFAULT_0:
       return g_data.dummy_zero;
@@ -129,12 +133,14 @@ static DRWShadingGroup *drw_volume_object_grids_init(Object *ob,
   volume_infos.temperature_bias = 0.0f;
 
   /* Bind volume grid textures. */
-  int grid_id = 0;
+  int grid_id = 0, grids_len = 0;
   LISTBASE_FOREACH (GPUMaterialAttribute *, attr, attrs) {
     const VolumeGrid *volume_grid = BKE_volume_grid_find_for_read(volume, attr->name);
     const DRWVolumeGrid *drw_grid = (volume_grid) ?
                                         DRW_volume_batch_cache_get_grid(volume, volume_grid) :
                                         nullptr;
+    /* Count number of valid attributes. */
+    grids_len += int(volume_grid != nullptr);
 
     /* Handle 3 cases here:
      * - Grid exists and texture was loaded -> use texture.
@@ -145,7 +151,13 @@ static DRWShadingGroup *drw_volume_object_grids_init(Object *ob,
                                                  grid_default_texture(attr->default_value);
     DRW_shgroup_uniform_texture(grp, attr->input_name, grid_tex);
 
-    copy_m4_m4(volume_infos.grids_xform[grid_id++].ptr(), drw_grid->object_to_texture);
+    copy_m4_m4(volume_infos.grids_xform[grid_id++].ptr(),
+               (drw_grid) ? drw_grid->object_to_texture : g_data.dummy_grid_mat);
+  }
+  /* Render nothing if there is no attribute for the shader to render.
+   * This also avoids an assert caused by the bounding box being zero in size. */
+  if (grids_len == 0) {
+    return nullptr;
   }
 
   volume_infos.push_update();

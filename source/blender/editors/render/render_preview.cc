@@ -805,7 +805,7 @@ static Scene *object_preview_scene_create(const struct ObjectPreviewData *previe
   Scene *scene = BKE_scene_add(preview_data->pr_main, "Object preview scene");
   /* Preview need to be in the current frame to get a thumbnail similar of what
    * viewport displays. */
-  CFRA = preview_data->cfra;
+  scene->r.cfra = preview_data->cfra;
 
   ViewLayer *view_layer = static_cast<ViewLayer *>(scene->view_layers.first);
   Depsgraph *depsgraph = DEG_graph_new(
@@ -1306,7 +1306,7 @@ static ImBuf *icon_preview_imbuf_from_brush(Brush *brush)
 {
   static const int flags = IB_rect | IB_multilayer | IB_metadata;
 
-  char path[FILE_MAX];
+  char filepath[FILE_MAX];
   const char *folder;
 
   if (!(brush->icon_imbuf)) {
@@ -1315,22 +1315,22 @@ static ImBuf *icon_preview_imbuf_from_brush(Brush *brush)
       if (brush->icon_filepath[0]) {
         /* First use the path directly to try and load the file. */
 
-        BLI_strncpy(path, brush->icon_filepath, sizeof(brush->icon_filepath));
-        BLI_path_abs(path, ID_BLEND_PATH_FROM_GLOBAL(&brush->id));
+        BLI_strncpy(filepath, brush->icon_filepath, sizeof(brush->icon_filepath));
+        BLI_path_abs(filepath, ID_BLEND_PATH_FROM_GLOBAL(&brush->id));
 
         /* Use default color-spaces for brushes. */
-        brush->icon_imbuf = IMB_loadiffname(path, flags, nullptr);
+        brush->icon_imbuf = IMB_loadiffname(filepath, flags, nullptr);
 
         /* otherwise lets try to find it in other directories */
         if (!(brush->icon_imbuf)) {
           folder = BKE_appdir_folder_id(BLENDER_DATAFILES, "brushicons");
 
           BLI_make_file_string(
-              BKE_main_blendfile_path_from_global(), path, folder, brush->icon_filepath);
+              BKE_main_blendfile_path_from_global(), filepath, folder, brush->icon_filepath);
 
-          if (path[0]) {
+          if (filepath[0]) {
             /* Use default color spaces. */
-            brush->icon_imbuf = IMB_loadiffname(path, flags, nullptr);
+            brush->icon_imbuf = IMB_loadiffname(filepath, flags, nullptr);
           }
         }
 
@@ -1771,7 +1771,7 @@ PreviewLoadJob &PreviewLoadJob::ensure_job(wmWindowManager *wm, wmWindow *win)
     WM_jobs_start(wm, wm_job);
   }
 
-  return *reinterpret_cast<PreviewLoadJob *>(WM_jobs_customdata_get(wm_job));
+  return *static_cast<PreviewLoadJob *>(WM_jobs_customdata_get(wm_job));
 }
 
 void PreviewLoadJob::load_jobless(PreviewImage *preview, const eIconSizes icon_size)
@@ -1807,11 +1807,11 @@ void PreviewLoadJob::run_fn(void *customdata,
                             short *do_update,
                             float *UNUSED(progress))
 {
-  PreviewLoadJob *job_data = reinterpret_cast<PreviewLoadJob *>(customdata);
+  PreviewLoadJob *job_data = static_cast<PreviewLoadJob *>(customdata);
 
   IMB_thumb_locks_acquire();
 
-  while (RequestedPreview *request = reinterpret_cast<RequestedPreview *>(
+  while (RequestedPreview *request = static_cast<RequestedPreview *>(
              BLI_thread_queue_pop_timeout(job_data->todo_queue_, 100))) {
     if (*stop) {
       break;
@@ -1821,13 +1821,13 @@ void PreviewLoadJob::run_fn(void *customdata,
 
     const char *deferred_data = static_cast<char *>(PRV_DEFERRED_DATA(preview));
     const ThumbSource source = static_cast<ThumbSource>(deferred_data[0]);
-    const char *path = &deferred_data[1];
+    const char *filepath = &deferred_data[1];
 
-    //    printf("loading deferred %d×%d preview for %s\n", request->sizex, request->sizey, path);
+    // printf("loading deferred %d×%d preview for %s\n", request->sizex, request->sizey, filepath);
 
-    IMB_thumb_path_lock(path);
-    ImBuf *thumb = IMB_thumb_manage(path, THB_LARGE, source);
-    IMB_thumb_path_unlock(path);
+    IMB_thumb_path_lock(filepath);
+    ImBuf *thumb = IMB_thumb_manage(filepath, THB_LARGE, source);
+    IMB_thumb_path_unlock(filepath);
 
     if (thumb) {
       /* PreviewImage assumes premultiplied alpha... */
@@ -1864,7 +1864,7 @@ void PreviewLoadJob::finish_request(RequestedPreview &request)
 
 void PreviewLoadJob::update_fn(void *customdata)
 {
-  PreviewLoadJob *job_data = reinterpret_cast<PreviewLoadJob *>(customdata);
+  PreviewLoadJob *job_data = static_cast<PreviewLoadJob *>(customdata);
 
   for (auto request_it = job_data->requested_previews_.begin();
        request_it != job_data->requested_previews_.end();) {
@@ -1884,7 +1884,7 @@ void PreviewLoadJob::update_fn(void *customdata)
 
 void PreviewLoadJob::end_fn(void *customdata)
 {
-  PreviewLoadJob *job_data = reinterpret_cast<PreviewLoadJob *>(customdata);
+  PreviewLoadJob *job_data = static_cast<PreviewLoadJob *>(customdata);
 
   /* Finish any possibly remaining queued previews. */
   for (RequestedPreview &request : job_data->requested_previews_) {
@@ -1895,7 +1895,7 @@ void PreviewLoadJob::end_fn(void *customdata)
 
 void PreviewLoadJob::free_fn(void *customdata)
 {
-  MEM_delete(reinterpret_cast<PreviewLoadJob *>(customdata));
+  MEM_delete(static_cast<PreviewLoadJob *>(customdata));
 }
 
 static void icon_preview_free(void *customdata)

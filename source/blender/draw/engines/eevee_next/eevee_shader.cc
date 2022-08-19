@@ -78,6 +78,66 @@ ShaderModule::~ShaderModule()
 const char *ShaderModule::static_shader_create_info_name_get(eShaderType shader_type)
 {
   switch (shader_type) {
+    case FILM_FRAG:
+      return "eevee_film_frag";
+    case FILM_COMP:
+      return "eevee_film_comp";
+    case HIZ_DEBUG:
+      return "eevee_hiz_debug";
+    case HIZ_UPDATE:
+      return "eevee_hiz_update";
+    case MOTION_BLUR_GATHER:
+      return "eevee_motion_blur_gather";
+    case MOTION_BLUR_TILE_DILATE:
+      return "eevee_motion_blur_tiles_dilate";
+    case MOTION_BLUR_TILE_FLATTEN_RENDER:
+      return "eevee_motion_blur_tiles_flatten_render";
+    case MOTION_BLUR_TILE_FLATTEN_VIEWPORT:
+      return "eevee_motion_blur_tiles_flatten_viewport";
+    case DOF_BOKEH_LUT:
+      return "eevee_depth_of_field_bokeh_lut";
+    case DOF_DOWNSAMPLE:
+      return "eevee_depth_of_field_downsample";
+    case DOF_FILTER:
+      return "eevee_depth_of_field_filter";
+    case DOF_GATHER_FOREGROUND_LUT:
+      return "eevee_depth_of_field_gather_foreground_lut";
+    case DOF_GATHER_FOREGROUND:
+      return "eevee_depth_of_field_gather_foreground_no_lut";
+    case DOF_GATHER_BACKGROUND_LUT:
+      return "eevee_depth_of_field_gather_background_lut";
+    case DOF_GATHER_BACKGROUND:
+      return "eevee_depth_of_field_gather_background_no_lut";
+    case DOF_GATHER_HOLE_FILL:
+      return "eevee_depth_of_field_hole_fill";
+    case DOF_REDUCE:
+      return "eevee_depth_of_field_reduce";
+    case DOF_RESOLVE:
+      return "eevee_depth_of_field_resolve_no_lut";
+    case DOF_RESOLVE_LUT:
+      return "eevee_depth_of_field_resolve_lut";
+    case DOF_SETUP:
+      return "eevee_depth_of_field_setup";
+    case DOF_SCATTER:
+      return "eevee_depth_of_field_scatter";
+    case DOF_STABILIZE:
+      return "eevee_depth_of_field_stabilize";
+    case DOF_TILES_DILATE_MINABS:
+      return "eevee_depth_of_field_tiles_dilate_minabs";
+    case DOF_TILES_DILATE_MINMAX:
+      return "eevee_depth_of_field_tiles_dilate_minmax";
+    case DOF_TILES_FLATTEN:
+      return "eevee_depth_of_field_tiles_flatten";
+    case LIGHT_CULLING_DEBUG:
+      return "eevee_light_culling_debug";
+    case LIGHT_CULLING_SELECT:
+      return "eevee_light_culling_select";
+    case LIGHT_CULLING_SORT:
+      return "eevee_light_culling_sort";
+    case LIGHT_CULLING_TILE:
+      return "eevee_light_culling_tile";
+    case LIGHT_CULLING_ZBIN:
+      return "eevee_light_culling_zbin";
     /* To avoid compiler warning about missing case. */
     case MAX_SHADER_TYPE:
       return "";
@@ -190,7 +250,7 @@ void ShaderModule::material_create_info_ammend(GPUMaterial *gpumat, GPUCodegenOu
     const StageInterfaceInfo &iface = *info.vertex_out_interfaces_.first();
     /* Globals the attrib_load() can write to when it is in the fragment shader. */
     global_vars << "struct " << iface.name << " {\n";
-    for (auto &inout : iface.inouts) {
+    for (const auto &inout : iface.inouts) {
       global_vars << "  " << inout.type << " " << inout.name << ";\n";
     }
     global_vars << "};\n";
@@ -289,6 +349,10 @@ void ShaderModule::material_create_info_ammend(GPUMaterial *gpumat, GPUCodegenOu
       break;
     default:
       switch (pipeline_type) {
+        case MAT_PIPE_FORWARD_PREPASS_VELOCITY:
+        case MAT_PIPE_DEFERRED_PREPASS_VELOCITY:
+          info.additional_info("eevee_surf_depth", "eevee_velocity_geom");
+          break;
         case MAT_PIPE_FORWARD_PREPASS:
         case MAT_PIPE_DEFERRED_PREPASS:
         case MAT_PIPE_SHADOW:

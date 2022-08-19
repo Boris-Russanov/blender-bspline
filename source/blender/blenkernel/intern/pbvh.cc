@@ -44,7 +44,7 @@ using blender::IndexRange;
 namespace blender::bke {
 
 template<typename Func>
-inline void to_static_color_type(const CustomDataType type, const Func &func)
+inline void to_static_color_type(const eCustomDataType type, const Func &func)
 {
   switch (type) {
     case CD_PROP_COLOR:
@@ -86,10 +86,12 @@ template<> void from_float(const float src[4], MPropCol &dst)
 }
 
 template<typename T>
-static void pbvh_vertex_color_get(const PBVH &pbvh, int vertex, float r_color[4])
+static void pbvh_vertex_color_get(const PBVH &pbvh, PBVHVertRef vertex, float r_color[4])
 {
+  int index = vertex.i;
+
   if (pbvh.color_domain == ATTR_DOMAIN_CORNER) {
-    const MeshElemMap &melem = pbvh.pmap[vertex];
+    const MeshElemMap &melem = pbvh.pmap[index];
 
     int count = 0;
     zero_v4(r_color);
@@ -99,7 +101,7 @@ static void pbvh_vertex_color_get(const PBVH &pbvh, int vertex, float r_color[4]
       Span<MLoop> loops{pbvh.mloop + mp.loopstart, mp.totloop};
 
       for (const int i_loop : IndexRange(mp.totloop)) {
-        if (loops[i_loop].v == vertex) {
+        if (loops[i_loop].v == index) {
           float temp[4];
           to_float(colors[i_loop], temp);
 
@@ -114,15 +116,17 @@ static void pbvh_vertex_color_get(const PBVH &pbvh, int vertex, float r_color[4]
     }
   }
   else {
-    to_float(static_cast<T *>(pbvh.color_layer->data)[vertex], r_color);
+    to_float(static_cast<T *>(pbvh.color_layer->data)[index], r_color);
   }
 }
 
 template<typename T>
-static void pbvh_vertex_color_set(PBVH &pbvh, int vertex, const float color[4])
+static void pbvh_vertex_color_set(PBVH &pbvh, PBVHVertRef vertex, const float color[4])
 {
+  int index = vertex.i;
+
   if (pbvh.color_domain == ATTR_DOMAIN_CORNER) {
-    const MeshElemMap &melem = pbvh.pmap[vertex];
+    const MeshElemMap &melem = pbvh.pmap[index];
 
     for (const int i_poly : Span(melem.indices, melem.count)) {
       const MPoly &mp = pbvh.mpoly[i_poly];
@@ -130,31 +134,31 @@ static void pbvh_vertex_color_set(PBVH &pbvh, int vertex, const float color[4])
       Span<MLoop> loops{pbvh.mloop + mp.loopstart, mp.totloop};
 
       for (const int i_loop : IndexRange(mp.totloop)) {
-        if (loops[i_loop].v == vertex) {
+        if (loops[i_loop].v == index) {
           from_float(color, colors[i_loop]);
         }
       }
     }
   }
   else {
-    from_float(color, static_cast<T *>(pbvh.color_layer->data)[vertex]);
+    from_float(color, static_cast<T *>(pbvh.color_layer->data)[index]);
   }
 }
 
 }  // namespace blender::bke
 
 extern "C" {
-void BKE_pbvh_vertex_color_get(const PBVH *pbvh, int vertex, float r_color[4])
+void BKE_pbvh_vertex_color_get(const PBVH *pbvh, PBVHVertRef vertex, float r_color[4])
 {
-  blender::bke::to_static_color_type(CustomDataType(pbvh->color_layer->type), [&](auto dummy) {
+  blender::bke::to_static_color_type(eCustomDataType(pbvh->color_layer->type), [&](auto dummy) {
     using T = decltype(dummy);
     blender::bke::pbvh_vertex_color_get<T>(*pbvh, vertex, r_color);
   });
 }
 
-void BKE_pbvh_vertex_color_set(PBVH *pbvh, int vertex, const float color[4])
+void BKE_pbvh_vertex_color_set(PBVH *pbvh, PBVHVertRef vertex, const float color[4])
 {
-  blender::bke::to_static_color_type(CustomDataType(pbvh->color_layer->type), [&](auto dummy) {
+  blender::bke::to_static_color_type(eCustomDataType(pbvh->color_layer->type), [&](auto dummy) {
     using T = decltype(dummy);
     blender::bke::pbvh_vertex_color_set<T>(*pbvh, vertex, color);
   });
@@ -165,7 +169,7 @@ void BKE_pbvh_swap_colors(PBVH *pbvh,
                           const int indices_num,
                           float (*r_colors)[4])
 {
-  blender::bke::to_static_color_type(CustomDataType(pbvh->color_layer->type), [&](auto dummy) {
+  blender::bke::to_static_color_type(eCustomDataType(pbvh->color_layer->type), [&](auto dummy) {
     using T = decltype(dummy);
     T *pbvh_colors = static_cast<T *>(pbvh->color_layer->data);
     for (const int i : IndexRange(indices_num)) {
@@ -181,7 +185,7 @@ void BKE_pbvh_store_colors(PBVH *pbvh,
                            const int indices_num,
                            float (*r_colors)[4])
 {
-  blender::bke::to_static_color_type(CustomDataType(pbvh->color_layer->type), [&](auto dummy) {
+  blender::bke::to_static_color_type(eCustomDataType(pbvh->color_layer->type), [&](auto dummy) {
     using T = decltype(dummy);
     T *pbvh_colors = static_cast<T *>(pbvh->color_layer->data);
     for (const int i : IndexRange(indices_num)) {
@@ -199,10 +203,10 @@ void BKE_pbvh_store_colors_vertex(PBVH *pbvh,
     BKE_pbvh_store_colors(pbvh, indices, indices_num, r_colors);
   }
   else {
-    blender::bke::to_static_color_type(CustomDataType(pbvh->color_layer->type), [&](auto dummy) {
+    blender::bke::to_static_color_type(eCustomDataType(pbvh->color_layer->type), [&](auto dummy) {
       using T = decltype(dummy);
       for (const int i : IndexRange(indices_num)) {
-        blender::bke::pbvh_vertex_color_get<T>(*pbvh, indices[i], r_colors[i]);
+        blender::bke::pbvh_vertex_color_get<T>(*pbvh, BKE_pbvh_make_vref(indices[i]), r_colors[i]);
       }
     });
   }

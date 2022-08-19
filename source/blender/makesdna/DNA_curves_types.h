@@ -67,23 +67,6 @@ typedef enum NormalMode {
  */
 typedef struct CurvesGeometry {
   /**
-   * A runtime pointer to the "position" attribute data.
-   * \note This data is owned by #point_data.
-   */
-  float (*position)[3];
-  /**
-   * A runtime pointer to the "radius" attribute data.
-   * \note This data is owned by #point_data.
-   */
-  float *radius;
-
-  /**
-   * The type of each curve. #CurveType.
-   * \note This data is owned by #curve_data.
-   */
-  int8_t *curve_type;
-
-  /**
    * The start index of each curve in the point data. The size of each curve can be calculated by
    * subtracting the offset from the next offset. That is valid even for the last curve because
    * this array is allocated with a length one larger than the number of curves. This is allowed
@@ -110,11 +93,11 @@ typedef struct CurvesGeometry {
   /**
    * The total number of control points in all curves.
    */
-  int point_size;
+  int point_num;
   /**
    * The number of curves in the data-block.
    */
-  int curve_size;
+  int curve_num;
 
   /**
    * Runtime data for curves, stored as a pointer to allow defining this as a C++ class.
@@ -141,7 +124,12 @@ typedef struct Curves {
    * symmetrical geometry.
    */
   char symmetry;
-  char _pad2[5];
+  /**
+   * #eAttrDomain. The active selection mode domain. At most one selection mode can be active
+   * at a time.
+   */
+  char selection_domain;
+  char _pad[4];
 
   /**
    * Used as base mesh when curves represent e.g. hair or fur. This surface is used in edit modes.
@@ -152,6 +140,13 @@ typedef struct Curves {
    */
   struct Object *surface;
 
+  /**
+   * The name of the attribute on the surface #Mesh used to give meaning to the UV attachment
+   * coordinates stored on each curve. Expected to be a 2D vector attribute on the face corner
+   * domain.
+   */
+  char *surface_uv_map;
+
   /* Draw Cache. */
   void *batch_cache;
 } Curves;
@@ -159,6 +154,7 @@ typedef struct Curves {
 /** #Curves.flag */
 enum {
   HA_DS_EXPAND = (1 << 0),
+  CV_SCULPT_SELECTION_ENABLED = (1 << 1),
 };
 
 /** #Curves.symmetry */

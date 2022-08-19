@@ -140,6 +140,7 @@ void register_node_tree_type_tex(void)
 
   tt->type = NTREE_TEXTURE;
   strcpy(tt->idname, "TextureNodeTree");
+  strcpy(tt->group_idname, "TextureNodeGroup");
   strcpy(tt->ui_name, N_("Texture Node Editor"));
   tt->ui_icon = ICON_NODE_TEXTURE; /* Defined in `drawnode.c`. */
   strcpy(tt->ui_description, N_("Texture nodes"));
@@ -324,7 +325,6 @@ int ntreeTexExecTree(bNodeTree *ntree,
                      MTex *mtex)
 {
   TexCallData data;
-  float *nor = target->nor;
   int retval = TEX_INT;
   bNodeThreadStack *nts = NULL;
   bNodeTreeExec *exec = ntree->execdata;
@@ -356,14 +356,7 @@ int ntreeTexExecTree(bNodeTree *ntree,
   ntreeExecThreadNodes(exec, nts, &data, thread);
   ntreeReleaseThreadStack(nts);
 
-  if (target->nor) {
-    retval |= TEX_NOR;
-  }
   retval |= TEX_RGB;
-  /* confusing stuff; the texture output node sets this to NULL to indicate no normal socket was
-   * set however, the texture code checks this for other reasons
-   * (namely, a normal is required for material). */
-  target->nor = nor;
 
   return retval;
 }

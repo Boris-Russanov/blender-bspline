@@ -13,6 +13,7 @@
 #include "DNA_object_enums.h"
 
 #include "BKE_attribute.h"
+#include "BKE_pbvh.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -180,6 +181,7 @@ struct Paint *BKE_paint_get_active_from_context(const struct bContext *C);
 ePaintMode BKE_paintmode_get_active_from_context(const struct bContext *C);
 ePaintMode BKE_paintmode_get_from_tool(const struct bToolRef *tref);
 struct Brush *BKE_paint_brush(struct Paint *paint);
+const struct Brush *BKE_paint_brush_for_read(const struct Paint *p);
 void BKE_paint_brush_set(struct Paint *paint, struct Brush *br);
 struct Palette *BKE_paint_palette(struct Paint *paint);
 void BKE_paint_palette_set(struct Paint *p, struct Palette *palette);
@@ -199,6 +201,11 @@ bool BKE_paint_select_vert_test(struct Object *ob);
  * (when we don't care if its face or vert)
  */
 bool BKE_paint_select_elem_test(struct Object *ob);
+/**
+ * Checks if face/vertex hiding is always applied in the current mode.
+ * Returns true in vertex/weight paint.
+ */
+bool BKE_paint_always_hide_test(struct Object *ob);
 
 /* Partial visibility. */
 
@@ -206,7 +213,7 @@ bool BKE_paint_select_elem_test(struct Object *ob);
  * Returns non-zero if any of the face's vertices are hidden, zero otherwise.
  */
 bool paint_is_face_hidden(const struct MLoopTri *lt,
-                          const struct MVert *mvert,
+                          const bool *hide_vert,
                           const struct MLoop *mloop);
 /**
  * Returns non-zero if any of the corners of the grid
@@ -391,7 +398,7 @@ typedef struct SculptVertexInfo {
 
 typedef struct SculptBoundaryEditInfo {
   /* Vertex index from where the topology propagation reached this vertex. */
-  int original_vertex;
+  int original_vertex_i;
 
   /* How many steps were needed to reach this vertex from the boundary. */
   int num_propagation_steps;
@@ -402,13 +409,14 @@ typedef struct SculptBoundaryEditInfo {
 
 /* Edge for drawing the boundary preview in the cursor. */
 typedef struct SculptBoundaryPreviewEdge {
-  int v1;
-  int v2;
+  PBVHVertRef v1;
+  PBVHVertRef v2;
 } SculptBoundaryPreviewEdge;
 
 typedef struct SculptBoundary {
   /* Vertex indices of the active boundary. */
-  int *vertices;
+  PBVHVertRef *vertices;
+  int *vertices_i;
   int vertices_capacity;
   int num_vertices;
 
@@ -426,12 +434,13 @@ typedef struct SculptBoundary {
   bool forms_loop;
 
   /* Initial vertex in the boundary which is closest to the current sculpt active vertex. */
-  int initial_vertex;
+  PBVHVertRef initial_vertex;
+  int initial_vertex_i;
 
   /* Vertex that at max_propagation_steps from the boundary and closest to the original active
    * vertex that was used to initialize the boundary. This is used as a reference to check how much
    * the deformation will go into the mesh and to calculate the strength of the brushes. */
-  int pivot_vertex;
+  PBVHVertRef pivot_vertex;
 
   /* Stores the initial positions of the pivot and boundary initial vertex as they may be deformed
    * during the brush action. This allows to use them as a reference positions and vectors for some
@@ -500,8 +509,8 @@ typedef struct SculptSession {
   struct MPropCol *vcol;
   struct MLoopCol *mcol;
 
-  AttributeDomain vcol_domain;
-  CustomDataType vcol_type;
+  eAttrDomain vcol_domain;
+  eCustomDataType vcol_type;
 
   float *vmask;
 
@@ -551,8 +560,7 @@ typedef struct SculptSession {
   float (*deform_cos)[3];       /* Coords of deformed mesh but without stroke displacement. */
   float (*deform_imats)[3][3];  /* Crazy-space deformation matrices. */
 
-  /* Used to cache the render of the active texture */
-  unsigned int texcache_side, *texcache, texcache_actual;
+  /* Pool for texture evaluations. */
   struct ImagePool *tex_pool;
 
   struct StrokeCache *cache;
@@ -560,7 +568,7 @@ typedef struct SculptSession {
   struct ExpandCache *expand_cache;
 
   /* Cursor data and active vertex for tools */
-  int active_vertex_index;
+  PBVHVertRef active_vertex;
 
   int active_face_index;
   int active_grid_index;
@@ -586,8 +594,8 @@ typedef struct SculptSession {
   struct Scene *scene;
 
   /* Dynamic mesh preview */
-  int *preview_vert_index_list;
-  int preview_vert_index_count;
+  PBVHVertRef *preview_vert_list;
+  int preview_vert_count;
 
   /* Pose Brush Preview */
   float pose_origin[3];
@@ -611,6 +619,10 @@ typedef struct SculptSession {
   float init_pivot_pos[3];
   float init_pivot_rot[4];
   float init_pivot_scale[3];
+
+  float prev_pivot_pos[3];
+  float prev_pivot_rot[4];
+  float prev_pivot_scale[3];
 
   union {
     struct {
@@ -675,8 +687,8 @@ void BKE_sculpt_update_object_for_edit(struct Depsgraph *depsgraph,
                                        struct Object *ob_orig,
                                        bool need_pmap,
                                        bool need_mask,
-                                       bool need_colors);
-void BKE_sculpt_update_object_before_eval(struct Object *ob_eval);
+                                       bool is_paint_tool);
+void BKE_sculpt_update_object_before_eval(const struct Scene *scene, struct Object *ob_eval);
 void BKE_sculpt_update_object_after_eval(struct Depsgraph *depsgraph, struct Object *ob_eval);
 
 /**

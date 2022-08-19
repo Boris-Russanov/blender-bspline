@@ -100,10 +100,9 @@ void MOD_get_texture_coords(MappingInfoModifierData *dmd,
       BLI_bitmap *done = BLI_BITMAP_NEW(verts_num, __func__);
       const int polys_num = mesh->totpoly;
       char uvname[MAX_CUSTOMDATA_LAYER_NAME];
-      MLoopUV *mloop_uv;
 
       CustomData_validate_layer_name(&mesh->ldata, CD_MLOOPUV, dmd->uvlayer_name, uvname);
-      mloop_uv = CustomData_get_layer_named(&mesh->ldata, CD_MLOOPUV, uvname);
+      const MLoopUV *mloop_uv = CustomData_get_layer_named(&mesh->ldata, CD_MLOOPUV, uvname);
 
       /* verts are given the UV from the first face that uses them */
       for (i = 0, mp = mpoly; i < polys_num; i++, mp++) {
@@ -170,7 +169,6 @@ Mesh *MOD_deform_mesh_eval_get(Object *ob,
                                Mesh *mesh,
                                const float (*vertexCos)[3],
                                const int verts_num,
-                               const bool use_normals,
                                const bool use_orco)
 {
   if (mesh != NULL) {
@@ -215,14 +213,6 @@ Mesh *MOD_deform_mesh_eval_get(Object *ob,
     if (mesh != NULL && mesh->totvert != verts_num) {
       BKE_id_free(NULL, mesh);
       mesh = NULL;
-    }
-  }
-
-  /* TODO: Remove this "use_normals" argument, since the caller should retrieve normals afterwards
-   * if necessary. */
-  if (use_normals) {
-    if (LIKELY(mesh)) {
-      BKE_mesh_vertex_normals_ensure(mesh);
     }
   }
 

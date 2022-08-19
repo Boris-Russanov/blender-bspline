@@ -24,6 +24,7 @@
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meta_types.h"
+#include "DNA_modifier_types.h"
 #include "DNA_object_fluidsim_types.h"
 #include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
@@ -36,6 +37,7 @@
 #include "BLI_math.h"
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
+#include "BLI_vector.hh"
 
 #include "BLT_translation.h"
 
@@ -71,6 +73,7 @@
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
 #include "BKE_nla.h"
+#include "BKE_node.h"
 #include "BKE_object.h"
 #include "BKE_particle.h"
 #include "BKE_pointcloud.h"
@@ -112,6 +115,10 @@
 #include "UI_resources.h"
 
 #include "object_intern.h"
+
+using blender::float3;
+using blender::float4x4;
+using blender::Vector;
 
 /* -------------------------------------------------------------------- */
 /** \name Local Enum Declarations
@@ -621,9 +628,16 @@ Object *ED_object_add_type_with_obdata(bContext *C,
   else {
     ob = BKE_object_add(bmain, view_layer, type, name);
   }
-  BASACT(view_layer)->local_view_bits = local_view_bits;
-  /* editor level activate, notifiers */
-  ED_object_base_activate(C, view_layer->basact);
+
+  Base *ob_base_act = BASACT(view_layer);
+  /* While not getting a valid base is not a good thing, it can happen in convoluted corner cases,
+   * better not crash on it in releases. */
+  BLI_assert(ob_base_act != nullptr);
+  if (ob_base_act != nullptr) {
+    ob_base_act->local_view_bits = local_view_bits;
+    /* editor level activate, notifiers */
+    ED_object_base_activate(C, ob_base_act);
+  }
 
   /* more editor stuff */
   ED_object_base_init_transform_on_add(ob, loc, rot);
@@ -1265,9 +1279,9 @@ void OBJECT_OT_drop_named_image(wmOperatorType *ot)
                   "Relative Path",
                   "Select the file relative to the blend file");
   RNA_def_property_flag(prop, (PropertyFlag)(PROP_HIDDEN | PROP_SKIP_SAVE));
-  prop = RNA_def_string(
-      ot->srna, "name", nullptr, MAX_ID_NAME - 2, "Name", "Image name to assign");
-  RNA_def_property_flag(prop, (PropertyFlag)(PROP_HIDDEN | PROP_SKIP_SAVE));
+
+  WM_operator_properties_id_lookup(ot, true);
+
   ED_object_add_generic_props(ot, false);
 }
 
@@ -1321,21 +1335,21 @@ static int object_gpencil_add_exec(bContext *C, wmOperator *op)
     const char *ob_name = nullptr;
     switch (type) {
       case GP_EMPTY: {
-        ob_name = "GPencil";
+        ob_name = CTX_DATA_(BLT_I18NCONTEXT_ID_GPENCIL, "GPencil");
         break;
       }
       case GP_MONKEY: {
-        ob_name = "Suzanne";
+        ob_name = CTX_DATA_(BLT_I18NCONTEXT_ID_GPENCIL, "Suzanne");
         break;
       }
       case GP_STROKE: {
-        ob_name = "Stroke";
+        ob_name = CTX_DATA_(BLT_I18NCONTEXT_ID_GPENCIL, "Stroke");
         break;
       }
       case GP_LRT_OBJECT:
       case GP_LRT_SCENE:
       case GP_LRT_COLLECTION: {
-        ob_name = "Line Art";
+        ob_name = CTX_DATA_(BLT_I18NCONTEXT_ID_GPENCIL, "LineArt");
         break;
       }
       default: {
@@ -1651,19 +1665,12 @@ static std::optional<CollectionAddInfo> collection_add_info_get_from_op(bContext
   Main *bmain = CTX_data_main(C);
 
   PropertyRNA *prop_location = RNA_struct_find_property(op->ptr, "location");
-  PropertyRNA *prop_session_uuid = RNA_struct_find_property(op->ptr, "session_uuid");
-  PropertyRNA *prop_name = RNA_struct_find_property(op->ptr, "name");
+
+  add_info.collection = reinterpret_cast<Collection *>(
+      WM_operator_properties_id_lookup_from_name_or_session_uuid(bmain, op->ptr, ID_GR));
 
   bool update_location_if_necessary = false;
-  if (prop_name && RNA_property_is_set(op->ptr, prop_name)) {
-    char name[MAX_ID_NAME - 2];
-    RNA_property_string_get(op->ptr, prop_name, name);
-    add_info.collection = (Collection *)BKE_libblock_find_name(bmain, ID_GR, name);
-    update_location_if_necessary = true;
-  }
-  else if (RNA_property_is_set(op->ptr, prop_session_uuid)) {
-    const uint32_t session_uuid = (uint32_t)RNA_property_int_get(op->ptr, prop_session_uuid);
-    add_info.collection = (Collection *)BKE_libblock_find_session_uuid(bmain, ID_GR, session_uuid);
+  if (add_info.collection) {
     update_location_if_necessary = true;
   }
   else {
@@ -1736,8 +1743,7 @@ static int object_instance_add_invoke(bContext *C, wmOperator *op, const wmEvent
     RNA_int_set(op->ptr, "drop_y", event->xy[1]);
   }
 
-  if (!RNA_struct_property_is_set(op->ptr, "name") &&
-      !RNA_struct_property_is_set(op->ptr, "session_uuid")) {
+  if (!WM_operator_properties_id_lookup_is_set(op->ptr)) {
     return WM_enum_search_invoke(C, op, event);
   }
   return op->type->exec(C, op);
@@ -1769,16 +1775,7 @@ void OBJECT_OT_collection_instance_add(wmOperatorType *ot)
   ot->prop = prop;
   ED_object_add_generic_props(ot, false);
 
-  prop = RNA_def_int(ot->srna,
-                     "session_uuid",
-                     0,
-                     INT32_MIN,
-                     INT32_MAX,
-                     "Session UUID",
-                     "Session UUID of the collection to add",
-                     INT32_MIN,
-                     INT32_MAX);
-  RNA_def_property_flag(prop, (PropertyFlag)(PROP_SKIP_SAVE | PROP_HIDDEN));
+  WM_operator_properties_id_lookup(ot, false);
 
   object_add_drop_xy_props(ot);
 }
@@ -1875,20 +1872,11 @@ void OBJECT_OT_collection_external_asset_drop(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 
   /* properties */
-  prop = RNA_def_int(ot->srna,
-                     "session_uuid",
-                     0,
-                     INT32_MIN,
-                     INT32_MAX,
-                     "Session UUID",
-                     "Session UUID of the collection to add",
-                     INT32_MIN,
-                     INT32_MAX);
-  RNA_def_property_flag(prop, (PropertyFlag)(PROP_SKIP_SAVE | PROP_HIDDEN));
+  WM_operator_properties_id_lookup(ot, false);
 
   ED_object_add_generic_props(ot, false);
 
-  /* Important: Instancing option. Intentionally remembered across executions (no #PROP_SKIP_SAVE).
+  /* IMPORTANT: Instancing option. Intentionally remembered across executions (no #PROP_SKIP_SAVE).
    */
   RNA_def_boolean(ot->srna,
                   "use_instance",
@@ -1920,18 +1908,12 @@ static int object_data_instance_add_exec(bContext *C, wmOperator *op)
   ushort local_view_bits;
   float loc[3], rot[3];
 
-  PropertyRNA *prop_name = RNA_struct_find_property(op->ptr, "name");
   PropertyRNA *prop_type = RNA_struct_find_property(op->ptr, "type");
   PropertyRNA *prop_location = RNA_struct_find_property(op->ptr, "location");
 
-  /* These shouldn't fail when created by outliner dropping as it checks the ID is valid. */
-  if (!RNA_property_is_set(op->ptr, prop_name) || !RNA_property_is_set(op->ptr, prop_type)) {
-    return OPERATOR_CANCELLED;
-  }
   const short id_type = RNA_property_enum_get(op->ptr, prop_type);
-  char name[MAX_ID_NAME - 2];
-  RNA_property_string_get(op->ptr, prop_name, name);
-  id = BKE_libblock_find_name(bmain, id_type, name);
+  id = WM_operator_properties_id_lookup_from_name_or_session_uuid(
+      bmain, op->ptr, (ID_Type)id_type);
   if (id == nullptr) {
     return OPERATOR_CANCELLED;
   }
@@ -1974,7 +1956,7 @@ void OBJECT_OT_data_instance_add(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* properties */
-  RNA_def_string(ot->srna, "name", "Name", MAX_ID_NAME - 2, "Name", "ID name to add");
+  WM_operator_properties_id_lookup(ot, true);
   PropertyRNA *prop = RNA_def_enum(ot->srna, "type", rna_enum_id_type_items, 0, "Type", "");
   RNA_def_property_translation_context(prop, BLT_I18NCONTEXT_ID_ID);
   ED_object_add_generic_props(ot, false);
@@ -2009,7 +1991,7 @@ static int object_speaker_add_exec(bContext *C, wmOperator *op)
     AnimData *adt = BKE_animdata_ensure_id(&ob->id);
     NlaTrack *nlt = BKE_nlatrack_add(adt, nullptr, is_liboverride);
     NlaStrip *strip = BKE_nla_add_soundstrip(bmain, scene, static_cast<Speaker *>(ob->data));
-    strip->start = CFRA;
+    strip->start = scene->r.cfra;
     strip->end += strip->start;
 
     /* hook them up */
@@ -2048,14 +2030,6 @@ void OBJECT_OT_speaker_add(wmOperatorType *ot)
 /** \name Add Curves Operator
  * \{ */
 
-static bool object_curves_add_poll(bContext *C)
-{
-  if (!U.experimental.use_new_curves_type) {
-    return false;
-  }
-  return ED_operator_objectmode(C);
-}
-
 static int object_curves_random_add_exec(bContext *C, wmOperator *op)
 {
   using namespace blender;
@@ -2068,7 +2042,6 @@ static int object_curves_random_add_exec(bContext *C, wmOperator *op)
   }
 
   Object *object = ED_object_add_type(C, OB_CURVES, nullptr, loc, rot, false, local_view_bits);
-  object->dtx |= OB_DRAWBOUNDOX; /* TODO: remove once there is actual drawing. */
 
   Curves *curves_id = static_cast<Curves *>(object->data);
   bke::CurvesGeometry::wrap(curves_id->geometry) = ed::curves::primitive_random_sphere(500, 8);
@@ -2085,7 +2058,7 @@ void OBJECT_OT_curves_random_add(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = object_curves_random_add_exec;
-  ot->poll = object_curves_add_poll;
+  ot->poll = ED_operator_objectmode;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -2095,25 +2068,57 @@ void OBJECT_OT_curves_random_add(wmOperatorType *ot)
 
 static int object_curves_empty_hair_add_exec(bContext *C, wmOperator *op)
 {
+  Scene *scene = CTX_data_scene(C);
+
   ushort local_view_bits;
-  float loc[3], rot[3];
   if (!ED_object_add_generic_get_opts(
-          C, op, 'Z', loc, rot, nullptr, nullptr, &local_view_bits, nullptr)) {
+          C, op, 'Z', nullptr, nullptr, nullptr, nullptr, &local_view_bits, nullptr)) {
     return OPERATOR_CANCELLED;
   }
 
   Object *surface_ob = CTX_data_active_object(C);
+  BLI_assert(surface_ob != nullptr);
 
-  Object *object = ED_object_add_type(C, OB_CURVES, nullptr, loc, rot, false, local_view_bits);
-  object->dtx |= OB_DRAWBOUNDOX; /* TODO: remove once there is actual drawing. */
+  Object *curves_ob = ED_object_add_type(
+      C, OB_CURVES, nullptr, nullptr, nullptr, false, local_view_bits);
+  BKE_object_apply_mat4(curves_ob, surface_ob->obmat, false, false);
 
-  if (surface_ob != nullptr && surface_ob->type == OB_MESH) {
-    Curves *curves_id = static_cast<Curves *>(object->data);
-    curves_id->surface = surface_ob;
-    id_us_plus(&surface_ob->id);
+  /* Set surface object. */
+  Curves *curves_id = static_cast<Curves *>(curves_ob->data);
+  curves_id->surface = surface_ob;
+
+  /* Parent to surface object. */
+  ED_object_parent_set(
+      op->reports, C, scene, curves_ob, surface_ob, PAR_OBJECT, false, true, nullptr);
+
+  /* Decide which UV map to use for attachment. */
+  Mesh *surface_mesh = static_cast<Mesh *>(surface_ob->data);
+  const char *uv_name = CustomData_get_active_layer_name(&surface_mesh->ldata, CD_MLOOPUV);
+  if (uv_name != nullptr) {
+    curves_id->surface_uv_map = BLI_strdup(uv_name);
   }
 
+  /* Add deformation modifier. */
+  blender::ed::curves::ensure_surface_deformation_node_exists(*C, *curves_ob);
+
+  /* Make sure the surface object has a rest position attribute which is necessary for
+   * deformations. */
+  surface_ob->modifier_flag |= OB_MODIFIER_FLAG_ADD_REST_POSITION;
+
   return OPERATOR_FINISHED;
+}
+
+static bool object_curves_empty_hair_add_poll(bContext *C)
+{
+  if (!ED_operator_objectmode(C)) {
+    return false;
+  }
+  Object *ob = CTX_data_active_object(C);
+  if (ob == nullptr || ob->type != OB_MESH) {
+    CTX_wm_operator_poll_msg_set(C, "No active mesh object");
+    return false;
+  }
+  return true;
 }
 
 void OBJECT_OT_curves_empty_hair_add(wmOperatorType *ot)
@@ -2123,7 +2128,7 @@ void OBJECT_OT_curves_empty_hair_add(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_curves_empty_hair_add";
 
   ot->exec = object_curves_empty_hair_add_exec;
-  ot->poll = object_curves_add_poll;
+  ot->poll = object_curves_empty_hair_add_poll;
 
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
@@ -2762,27 +2767,9 @@ static const EnumPropertyItem convert_target_items[] = {
      "Point Cloud",
      "Point Cloud from Mesh objects"},
 #endif
+    {OB_CURVES, "CURVES", ICON_OUTLINER_OB_CURVES, "Curves", "Curves from evaluated curve data"},
     {0, nullptr, 0, nullptr, nullptr},
 };
-
-static void object_data_convert_ensure_curve_cache(Depsgraph *depsgraph, Scene *scene, Object *ob)
-{
-  if (ob->runtime.curve_cache == nullptr) {
-    /* Force creation. This is normally not needed but on operator
-     * redo we might end up with an object which isn't evaluated yet.
-     * Also happens in case we are working on a copy of the object
-     * (all its caches have been nuked then).
-     */
-    if (ELEM(ob->type, OB_SURF, OB_CURVES_LEGACY, OB_FONT)) {
-      /* We need 'for render' ON here, to enable computing bevel #DispList if needed.
-       * Also makes sense anyway, we would not want e.g. to lose hidden parts etc. */
-      BKE_displist_make_curveTypes(depsgraph, scene, ob, true);
-    }
-    else if (ob->type == OB_MBALL) {
-      BKE_displist_make_mball(depsgraph, scene, ob);
-    }
-  }
-}
 
 static void object_data_convert_curve_to_mesh(Main *bmain, Depsgraph *depsgraph, Object *ob)
 {
@@ -2902,7 +2889,7 @@ static int object_convert_exec(bContext *C, wmOperator *op)
   const bool use_faces = RNA_boolean_get(op->ptr, "faces");
   const float offset = RNA_float_get(op->ptr, "offset");
 
-  int a, mballConverted = 0;
+  int mballConverted = 0;
   bool gpencilConverted = false;
   bool gpencilCurveConverted = false;
 
@@ -3065,6 +3052,50 @@ static int object_convert_exec(bContext *C, wmOperator *op)
       }
       ob_gpencil->actcol = actcol;
     }
+    else if (target == OB_CURVES) {
+      ob->flag |= OB_DONE;
+
+      Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+      GeometrySet geometry;
+      if (ob_eval->runtime.geometry_set_eval != nullptr) {
+        geometry = *ob_eval->runtime.geometry_set_eval;
+      }
+
+      if (geometry.has_curves()) {
+        if (keep_original) {
+          basen = duplibase_for_convert(bmain, depsgraph, scene, view_layer, base, nullptr);
+          newob = basen->object;
+
+          /* Decrement original curve's usage count. */
+          Curve *legacy_curve = static_cast<Curve *>(newob->data);
+          id_us_min(&legacy_curve->id);
+
+          /* Make a copy of the curve. */
+          newob->data = BKE_id_copy(bmain, &legacy_curve->id);
+        }
+        else {
+          newob = ob;
+        }
+
+        const CurveComponent &curve_component = *geometry.get_component_for_read<CurveComponent>();
+        const Curves *curves_eval = curve_component.get_for_read();
+        Curves *new_curves = static_cast<Curves *>(BKE_id_new(bmain, ID_CV, newob->id.name + 2));
+
+        newob->data = new_curves;
+        newob->type = OB_CURVES;
+
+        blender::bke::CurvesGeometry::wrap(
+            new_curves->geometry) = blender::bke::CurvesGeometry::wrap(curves_eval->geometry);
+        BKE_object_material_from_eval_data(bmain, newob, &curves_eval->id);
+
+        BKE_object_free_derived_caches(newob);
+        BKE_object_free_modifiers(newob, 0);
+      }
+      else {
+        BKE_reportf(
+            op->reports, RPT_WARNING, "Object '%s' has no evaluated curves data", ob->id.name + 2);
+      }
+    }
     else if (ob->type == OB_MESH && target == OB_POINTCLOUD) {
       ob->flag |= OB_DONE;
 
@@ -3128,9 +3159,7 @@ static int object_convert_exec(bContext *C, wmOperator *op)
       }
 
       /* Anonymous attributes shouldn't be available on the applied geometry. */
-      MeshComponent component;
-      component.replace(new_mesh, GeometryOwnershipType::Editable);
-      component.attributes_remove_anonymous();
+      blender::bke::mesh_attributes_for_write(*new_mesh).remove_anonymous();
 
       BKE_object_free_modifiers(newob, 0); /* after derivedmesh calls! */
     }
@@ -3208,7 +3237,7 @@ static int object_convert_exec(bContext *C, wmOperator *op)
         /* No assumption should be made that the resulting objects is a mesh, as conversion can
          * fail. */
         object_data_convert_curve_to_mesh(bmain, depsgraph, newob);
-        /* meshes doesn't use displist */
+        /* Meshes doesn't use the "curve cache". */
         BKE_object_free_curve_cache(newob);
       }
       else if (target == OB_GPENCIL) {
@@ -3243,7 +3272,7 @@ static int object_convert_exec(bContext *C, wmOperator *op)
         /* No assumption should be made that the resulting objects is a mesh, as conversion can
          * fail. */
         object_data_convert_curve_to_mesh(bmain, depsgraph, newob);
-        /* meshes doesn't use displist */
+        /* Meshes don't use the "curve cache". */
         BKE_object_free_curve_cache(newob);
       }
       else if (target == OB_GPENCIL) {
@@ -3284,21 +3313,13 @@ static int object_convert_exec(bContext *C, wmOperator *op)
         MetaBall *mb = static_cast<MetaBall *>(newob->data);
         id_us_min(&mb->id);
 
-        newob->data = BKE_mesh_add(bmain, "Mesh");
+        /* Find the evaluated mesh of the basis metaball object. */
+        Object *object_eval = DEG_get_evaluated_object(depsgraph, baseob);
+        Mesh *mesh = BKE_mesh_new_from_object_to_bmain(bmain, depsgraph, object_eval, true);
+
+        id_us_plus(&mesh->id);
+        newob->data = mesh;
         newob->type = OB_MESH;
-
-        Mesh *me = static_cast<Mesh *>(newob->data);
-        me->totcol = mb->totcol;
-        if (newob->totcol) {
-          me->mat = static_cast<Material **>(MEM_dupallocN(mb->mat));
-          for (a = 0; a < newob->totcol; a++) {
-            id_us_plus((ID *)me->mat[a]);
-          }
-        }
-
-        object_data_convert_ensure_curve_cache(depsgraph, scene, baseob);
-        BKE_mesh_from_metaball(&baseob->runtime.curve_cache->disp,
-                               static_cast<Mesh *>(newob->data));
 
         if (obact->type == OB_MBALL) {
           basact = basen;
@@ -3535,7 +3556,8 @@ static Base *object_add_duplicate_internal(Main *bmain,
                                            ViewLayer *view_layer,
                                            Object *ob,
                                            const eDupli_ID_Flags dupflag,
-                                           const eLibIDDuplicateFlags duplicate_options)
+                                           const eLibIDDuplicateFlags duplicate_options,
+                                           Object **r_ob_new)
 {
   Base *base, *basen = nullptr;
   Object *obn;
@@ -3546,6 +3568,9 @@ static Base *object_add_duplicate_internal(Main *bmain,
   else {
     obn = static_cast<Object *>(
         ID_NEW_SET(ob, BKE_object_duplicate(bmain, ob, dupflag, duplicate_options)));
+    if (r_ob_new) {
+      *r_ob_new = obn;
+    }
     DEG_id_tag_update(&obn->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
 
     base = BKE_view_layer_base_find(view_layer, ob);
@@ -3558,7 +3583,7 @@ static Base *object_add_duplicate_internal(Main *bmain,
     }
 
     basen = BKE_view_layer_base_find(view_layer, obn);
-    if (base != nullptr) {
+    if (base != nullptr && basen != nullptr) {
       basen->local_view_bits = base->local_view_bits;
     }
 
@@ -3589,7 +3614,8 @@ Base *ED_object_add_duplicate(
                                         base->object,
                                         dupflag,
                                         LIB_ID_DUPLICATE_IS_SUBPROCESS |
-                                            LIB_ID_DUPLICATE_IS_ROOT_ID);
+                                            LIB_ID_DUPLICATE_IS_ROOT_ID,
+                                        nullptr);
   if (basen == nullptr) {
     return nullptr;
   }
@@ -3622,44 +3648,73 @@ static int duplicate_exec(bContext *C, wmOperator *op)
   ViewLayer *view_layer = CTX_data_view_layer(C);
   const bool linked = RNA_boolean_get(op->ptr, "linked");
   const eDupli_ID_Flags dupflag = (linked) ? (eDupli_ID_Flags)0 : (eDupli_ID_Flags)U.dupflag;
-  bool changed = false;
 
   /* We need to handle that here ourselves, because we may duplicate several objects, in which case
    * we also want to remap pointers between those... */
   BKE_main_id_newptr_and_tag_clear(bmain);
 
+  /* Do not do collection re-syncs for each object; will do it once afterwards.
+   * However this means we can't get to new duplicated Base's immediately, will
+   * have to process them after the sync. */
+  BKE_layer_collection_resync_forbid();
+
+  /* Duplicate the selected objects, remember data needed to process
+   * after the sync (the base of the original object, and the copy of the
+   * original object). */
+  blender::Vector<std::pair<Base *, Object *>> source_bases_new_objects;
+  Object *ob_new_active = nullptr;
+
   CTX_DATA_BEGIN (C, Base *, base, selected_bases) {
-    Base *basen = object_add_duplicate_internal(bmain,
-                                                scene,
-                                                view_layer,
-                                                base->object,
-                                                dupflag,
-                                                LIB_ID_DUPLICATE_IS_SUBPROCESS |
-                                                    LIB_ID_DUPLICATE_IS_ROOT_ID);
+    Object *ob_new = NULL;
+    object_add_duplicate_internal(bmain,
+                                  scene,
+                                  view_layer,
+                                  base->object,
+                                  dupflag,
+                                  LIB_ID_DUPLICATE_IS_SUBPROCESS | LIB_ID_DUPLICATE_IS_ROOT_ID,
+                                  &ob_new);
+    if (ob_new == nullptr) {
+      continue;
+    }
+    source_bases_new_objects.append({base, ob_new});
 
     /* note that this is safe to do with this context iterator,
      * the list is made in advance */
     ED_object_base_select(base, BA_DESELECT);
-    ED_object_base_select(basen, BA_SELECT);
-    changed = true;
 
-    if (basen == nullptr) {
-      continue;
-    }
-
-    /* new object becomes active */
+    /* new object will become active */
     if (BASACT(view_layer) == base) {
-      ED_object_base_activate(C, basen);
-    }
-
-    if (basen->object->data) {
-      DEG_id_tag_update(static_cast<ID *>(basen->object->data), 0);
+      ob_new_active = ob_new;
     }
   }
   CTX_DATA_END;
+  BKE_layer_collection_resync_allow();
 
-  if (!changed) {
+  if (source_bases_new_objects.is_empty()) {
     return OPERATOR_CANCELLED;
+  }
+
+  /* Sync the collection now, after everything is duplicated. */
+  BKE_main_collection_sync(bmain);
+
+  /* After sync we can get to the new Base data, process it here. */
+  for (const auto &item : source_bases_new_objects) {
+    Object *ob_new = item.second;
+    Base *base_source = item.first;
+    Base *base_new = BKE_view_layer_base_find(view_layer, ob_new);
+    if (base_new == nullptr) {
+      continue;
+    }
+    ED_object_base_select(base_new, BA_SELECT);
+    if (ob_new == ob_new_active) {
+      ED_object_base_activate(C, base_new);
+    }
+    if (base_new->object->data) {
+      DEG_id_tag_update(static_cast<ID *>(base_new->object->data), 0);
+    }
+    /* #object_add_duplicate_internal will not have done this, since
+     * before the collection sync it would not have found the new base yet. */
+    base_new->local_view_bits = base_source->local_view_bits;
   }
 
   /* Note that this will also clear newid pointers and tags. */
@@ -3718,15 +3773,13 @@ static int object_add_named_exec(bContext *C, wmOperator *op)
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
-  Base *basen;
-  Object *ob;
   const bool linked = RNA_boolean_get(op->ptr, "linked");
   const eDupli_ID_Flags dupflag = (linked) ? (eDupli_ID_Flags)0 : (eDupli_ID_Flags)U.dupflag;
-  char name[MAX_ID_NAME - 2];
 
-  /* find object, create fake base */
-  RNA_string_get(op->ptr, "name", name);
-  ob = (Object *)BKE_libblock_find_name(bmain, ID_OB, name);
+  /* Find object, create fake base. */
+
+  Object *ob = reinterpret_cast<Object *>(
+      WM_operator_properties_id_lookup_from_name_or_session_uuid(bmain, op->ptr, ID_OB));
 
   if (ob == nullptr) {
     BKE_report(op->reports, RPT_ERROR, "Object not found");
@@ -3734,7 +3787,7 @@ static int object_add_named_exec(bContext *C, wmOperator *op)
   }
 
   /* prepare dupli */
-  basen = object_add_duplicate_internal(
+  Base *basen = object_add_duplicate_internal(
       bmain,
       scene,
       view_layer,
@@ -3745,7 +3798,8 @@ static int object_add_named_exec(bContext *C, wmOperator *op)
        * the case here. So we have to do the new-ID relinking ourselves
        * (#copy_object_set_idnew()).
        */
-      LIB_ID_DUPLICATE_IS_SUBPROCESS | LIB_ID_DUPLICATE_IS_ROOT_ID);
+      LIB_ID_DUPLICATE_IS_SUBPROCESS | LIB_ID_DUPLICATE_IS_ROOT_ID,
+      nullptr);
 
   if (basen == nullptr) {
     BKE_report(op->reports, RPT_ERROR, "Object could not be duplicated");
@@ -3814,7 +3868,7 @@ void OBJECT_OT_add_named(wmOperatorType *ot)
                   "Linked",
                   "Duplicate object but not object data, linking to the original data");
 
-  RNA_def_string(ot->srna, "name", nullptr, MAX_ID_NAME - 2, "Name", "Object name to add");
+  WM_operator_properties_id_lookup(ot, true);
 
   prop = RNA_def_float_matrix(
       ot->srna, "matrix", 4, 4, nullptr, 0.0f, 0.0f, "Matrix", "", 0.0f, 0.0f);
@@ -3836,14 +3890,11 @@ static int object_transform_to_mouse_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
-  Object *ob;
 
-  if (RNA_struct_property_is_set(op->ptr, "name")) {
-    char name[MAX_ID_NAME - 2];
-    RNA_string_get(op->ptr, "name", name);
-    ob = (Object *)BKE_libblock_find_name(bmain, ID_OB, name);
-  }
-  else {
+  Object *ob = reinterpret_cast<Object *>(
+      WM_operator_properties_id_lookup_from_name_or_session_uuid(bmain, op->ptr, ID_OB));
+
+  if (!ob) {
     ob = OBACT(view_layer);
   }
 
@@ -3916,18 +3967,31 @@ void OBJECT_OT_transform_to_mouse(wmOperatorType *ot)
   /* api callbacks */
   ot->invoke = object_add_drop_xy_generic_invoke;
   ot->exec = object_transform_to_mouse_exec;
-  ot->poll = ED_operator_objectmode;
+  ot->poll = ED_operator_objectmode_poll_msg;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   PropertyRNA *prop;
-  RNA_def_string(ot->srna,
-                 "name",
-                 nullptr,
-                 MAX_ID_NAME - 2,
-                 "Name",
-                 "Object name to place (when unset use the active object)");
+  prop = RNA_def_string(
+      ot->srna,
+      "name",
+      nullptr,
+      MAX_ID_NAME - 2,
+      "Name",
+      "Object name to place (uses the active object when this and 'session_uuid' are unset)");
+  RNA_def_property_flag(prop, (PropertyFlag)(PROP_SKIP_SAVE | PROP_HIDDEN));
+  prop = RNA_def_int(ot->srna,
+                     "session_uuid",
+                     0,
+                     INT32_MIN,
+                     INT32_MAX,
+                     "Session UUID",
+                     "Session UUID of the object to place (uses the active object when this and "
+                     "'name' are unset)",
+                     INT32_MIN,
+                     INT32_MAX);
+  RNA_def_property_flag(prop, (PropertyFlag)(PROP_SKIP_SAVE | PROP_HIDDEN));
 
   prop = RNA_def_float_matrix(
       ot->srna, "matrix", 4, 4, nullptr, 0.0f, 0.0f, "Matrix", "", 0.0f, 0.0f);

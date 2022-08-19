@@ -43,8 +43,8 @@
 #include "DNA_camera_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_userdef_types.h"
 #include "DNA_world_types.h"
-#include "draw_manager.h"
 
 #include "ED_gpencil.h"
 #include "ED_screen.h"
@@ -85,6 +85,7 @@
 #include "draw_cache_impl.h"
 
 #include "engines/basic/basic_engine.h"
+#include "engines/compositor/compositor_engine.h"
 #include "engines/eevee/eevee_engine.h"
 #include "engines/eevee_next/eevee_engine.h"
 #include "engines/external/external_engine.h"
@@ -213,17 +214,6 @@ int DRW_object_visibility_in_active_context(const Object *ob)
   return BKE_object_visibility(ob, mode);
 }
 
-bool DRW_object_is_flat_normal(const Object *ob)
-{
-  if (ob->type == OB_MESH) {
-    const Mesh *me = ob->data;
-    if (me->mpoly && me->mpoly[0].flag & ME_SMOOTH) {
-      return false;
-    }
-  }
-  return true;
-}
-
 bool DRW_object_use_hide_faces(const struct Object *ob)
 {
   if (ob->type == OB_MESH) {
@@ -236,7 +226,7 @@ bool DRW_object_use_hide_faces(const struct Object *ob)
         return (me->editflag & ME_EDIT_PAINT_FACE_SEL) != 0;
       case OB_MODE_VERTEX_PAINT:
       case OB_MODE_WEIGHT_PAINT:
-        return (me->editflag & (ME_EDIT_PAINT_FACE_SEL | ME_EDIT_PAINT_VERT_SEL)) != 0;
+        return true;
     }
   }
 
@@ -479,6 +469,7 @@ void DRW_viewport_data_free(DRWData *drw_data)
     MEM_freeN(drw_data->obinfos_ubo);
   }
   DRW_volume_ubos_pool_free(drw_data->volume_grids_ubos);
+  DRW_curves_ubos_pool_free(drw_data->curves_ubos);
   MEM_freeN(drw_data);
 }
 
@@ -501,7 +492,7 @@ static DRWData *drw_viewport_data_ensure(GPUViewport *viewport)
  * - size can be NULL to get it from viewport.
  * - if viewport and size are NULL, size is set to (1, 1).
  *
- * Important: drw_manager_init can be called multiple times before drw_manager_exit.
+ * IMPORTANT: #drw_manager_init can be called multiple times before #drw_manager_exit.
  */
 static void drw_manager_init(DRWManager *dst, GPUViewport *viewport, const int size[2])
 {
@@ -529,7 +520,7 @@ static void drw_manager_init(DRWManager *dst, GPUViewport *viewport, const int s
   dst->view_data_active = dst->vmempool->view_data[view];
   dst->resource_handle = 0;
   dst->pass_handle = 0;
-  dst->primary_view_ct = 0;
+  dst->primary_view_num = 0;
 
   drw_viewport_data_reset(dst->vmempool);
 
@@ -1225,6 +1216,31 @@ static void drw_engines_enable_editors(void)
   }
 }
 
+static bool is_compositor_enabled(void)
+{
+  if (!U.experimental.use_realtime_compositor) {
+    return false;
+  }
+
+  if (!(DST.draw_ctx.v3d->shading.flag & V3D_SHADING_COMPOSITOR)) {
+    return false;
+  }
+
+  if (!(DST.draw_ctx.v3d->shading.type >= OB_MATERIAL)) {
+    return false;
+  }
+
+  if (!DST.draw_ctx.scene->use_nodes) {
+    return false;
+  }
+
+  if (!DST.draw_ctx.scene->nodetree) {
+    return false;
+  }
+
+  return true;
+}
+
 static void drw_engines_enable(ViewLayer *UNUSED(view_layer),
                                RenderEngineType *engine_type,
                                bool gpencil_engine_needed)
@@ -1237,6 +1253,11 @@ static void drw_engines_enable(ViewLayer *UNUSED(view_layer),
   if (gpencil_engine_needed && ((drawtype >= OB_SOLID) || !use_xray)) {
     use_drw_engine(&draw_engine_gpencil_type);
   }
+
+  if (is_compositor_enabled()) {
+    use_drw_engine(&draw_engine_compositor_type);
+  }
+
   drw_engines_enable_overlays();
 
 #ifdef WITH_DRAW_DEBUG
@@ -1287,7 +1308,7 @@ void DRW_notify_view_update(const DRWUpdateContext *update_ctx)
 
   const bool gpencil_engine_needed = drw_gpencil_engine_needed(depsgraph, v3d);
 
-  if (G.is_rendering) {
+  if (G.is_rendering && U.experimental.use_draw_manager_acquire_lock) {
     return;
   }
 
@@ -1608,7 +1629,6 @@ void DRW_draw_render_loop_ex(struct Depsgraph *depsgraph,
                              GPUViewport *viewport,
                              const bContext *evil_C)
 {
-
   Scene *scene = DEG_get_evaluated_scene(depsgraph);
   ViewLayer *view_layer = DEG_get_evaluated_view_layer(depsgraph);
   RegionView3D *rv3d = region->regiondata;
@@ -1650,7 +1670,7 @@ void DRW_draw_render_loop_ex(struct Depsgraph *depsgraph,
   DRW_globals_update();
 
   drw_debug_init();
-  DRW_curves_init();
+  DRW_curves_init(DST.vmempool);
   DRW_volume_init(DST.vmempool);
   DRW_smoke_init(DST.vmempool);
 
@@ -2022,7 +2042,7 @@ void DRW_render_object_iter(
     void (*callback)(void *vedata, Object *ob, RenderEngine *engine, struct Depsgraph *depsgraph))
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
-  DRW_curves_init();
+  DRW_curves_init(DST.vmempool);
   DRW_volume_init(DST.vmempool);
   DRW_smoke_init(DST.vmempool);
 
@@ -2079,7 +2099,7 @@ void DRW_custom_pipeline(DrawEngineType *draw_engine_type,
 
   drw_manager_init(&DST, NULL, NULL);
 
-  DRW_curves_init();
+  DRW_curves_init(DST.vmempool);
   DRW_volume_init(DST.vmempool);
   DRW_smoke_init(DST.vmempool);
 
@@ -2114,7 +2134,7 @@ void DRW_cache_restart(void)
 
   DST.buffer_finish_called = false;
 
-  DRW_curves_init();
+  DRW_curves_init(DST.vmempool);
   DRW_volume_init(DST.vmempool);
   DRW_smoke_init(DST.vmempool);
 }
@@ -2433,7 +2453,7 @@ void DRW_draw_select_loop(struct Depsgraph *depsgraph,
 
   /* Init engines */
   drw_engines_init();
-  DRW_curves_init();
+  DRW_curves_init(DST.vmempool);
   DRW_volume_init(DST.vmempool);
   DRW_smoke_init(DST.vmempool);
 
@@ -2607,7 +2627,7 @@ static void drw_draw_depth_loop_impl(struct Depsgraph *depsgraph,
 
   /* Init engines */
   drw_engines_init();
-  DRW_curves_init();
+  DRW_curves_init(DST.vmempool);
   DRW_volume_init(DST.vmempool);
   DRW_smoke_init(DST.vmempool);
 
@@ -2959,6 +2979,7 @@ void DRW_engines_register(void)
   DRW_engine_register(&draw_engine_overlay_type);
   DRW_engine_register(&draw_engine_select_type);
   DRW_engine_register(&draw_engine_basic_type);
+  DRW_engine_register(&draw_engine_compositor_type);
 #ifdef WITH_DRAW_DEBUG
   DRW_engine_register(&draw_engine_debug_select_type);
 #endif
@@ -2968,9 +2989,6 @@ void DRW_engines_register(void)
 
   /* setup callbacks */
   {
-    BKE_mball_batch_cache_dirty_tag_cb = DRW_mball_batch_cache_dirty_tag;
-    BKE_mball_batch_cache_free_cb = DRW_mball_batch_cache_free;
-
     BKE_curve_batch_cache_dirty_tag_cb = DRW_curve_batch_cache_dirty_tag;
     BKE_curve_batch_cache_free_cb = DRW_curve_batch_cache_free;
 
@@ -3038,6 +3056,9 @@ void DRW_engines_free(void)
   DRW_shape_cache_free();
   DRW_stats_free();
   DRW_globals_free();
+
+  drw_debug_module_free(DST.debug);
+  DST.debug = NULL;
 
   DRW_UBO_FREE_SAFE(G_draw.block_ubo);
   DRW_UBO_FREE_SAFE(G_draw.view_ubo);

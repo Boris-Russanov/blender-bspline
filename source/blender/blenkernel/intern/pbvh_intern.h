@@ -2,6 +2,8 @@
 
 #pragma once
 
+struct PBVHGPUFormat;
+
 /** \file
  * \ingroup bke
  */
@@ -9,6 +11,11 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+struct MLoop;
+struct MLoopTri;
+struct MPoly;
+struct MVert;
 
 /* Axis-aligned bounding box */
 typedef struct {
@@ -116,16 +123,19 @@ struct PBVHNode {
   /* Used to store the brush color during a stroke and composite it over the original color */
   PBVHColorBufferNode color_buffer;
   PBVHPixelsNode pixels;
+
+  /* Used to flash colors of updated node bounding boxes in
+   * debug draw mode (when G.debug_value / bpy.app.debug_value is 889).
+   */
+  int debug_draw_gen;
 };
 
-typedef enum {
-  PBVH_DYNTOPO_SMOOTH_SHADING = 1,
-} PBVHFlags;
+typedef enum { PBVH_DYNTOPO_SMOOTH_SHADING = 1 } PBVHFlags;
 
 typedef struct PBVHBMeshLog PBVHBMeshLog;
 
 struct PBVH {
-  PBVHType type;
+  struct PBVHPublic header;
   PBVHFlags flags;
 
   PBVHNode *nodes;
@@ -139,14 +149,15 @@ struct PBVH {
   int leaf_limit;
 
   /* Mesh data */
-  const struct Mesh *mesh;
+  struct Mesh *mesh;
 
-  /* Note: Normals are not const because they can be updated for drawing by sculpt code. */
+  /* NOTE: Normals are not `const` because they can be updated for drawing by sculpt code. */
   float (*vert_normals)[3];
-  MVert *verts;
-  const MPoly *mpoly;
-  const MLoop *mloop;
-  const MLoopTri *looptri;
+  bool *hide_vert;
+  struct MVert *verts;
+  const struct MPoly *mpoly;
+  const struct MLoop *mloop;
+  const struct MLoopTri *looptri;
   CustomData *vdata;
   CustomData *ldata;
   CustomData *pdata;
@@ -165,7 +176,7 @@ struct PBVH {
 
   /* Used during BVH build and later to mark that a vertex needs to update
    * (its normal must be recalculated). */
-  BLI_bitmap *vert_bitmap;
+  bool *vert_bitmap;
 
 #ifdef PERFCNTRS
   int perf_modified;
@@ -178,7 +189,6 @@ struct PBVH {
   bool respect_hide;
 
   /* Dynamic topology */
-  BMesh *bm;
   float bm_max_edge_len;
   float bm_min_edge_len;
   int cd_vert_node_offset;
@@ -193,12 +203,14 @@ struct PBVH {
   const struct MeshElemMap *pmap;
 
   CustomDataLayer *color_layer;
-  AttributeDomain color_domain;
+  eAttrDomain color_domain;
 
   bool is_drawing;
 
   /* Used by DynTopo to invalidate the draw cache. */
   bool draw_cache_invalid;
+
+  struct PBVHGPUFormat *vbo_id;
 };
 
 /* pbvh.c */
@@ -258,7 +270,7 @@ bool pbvh_bmesh_node_raycast(PBVHNode *node,
                              struct IsectRayPrecalc *isect_precalc,
                              float *dist,
                              bool use_original,
-                             int *r_active_vertex_index,
+                             PBVHVertRef *r_active_vertex,
                              float *r_face_normal);
 bool pbvh_bmesh_node_nearest_to_ray(PBVHNode *node,
                                     const float ray_start[3],

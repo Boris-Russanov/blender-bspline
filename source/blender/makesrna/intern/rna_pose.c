@@ -108,14 +108,14 @@ static void rna_Pose_IK_update(Main *UNUSED(bmain), Scene *UNUSED(scene), Pointe
   BIK_clear_data(ob->pose);
 }
 
-static char *rna_Pose_path(PointerRNA *UNUSED(ptr))
+static char *rna_Pose_path(const PointerRNA *UNUSED(ptr))
 {
   return BLI_strdup("pose");
 }
 
-static char *rna_PoseBone_path(PointerRNA *ptr)
+static char *rna_PoseBone_path(const PointerRNA *ptr)
 {
-  bPoseChannel *pchan = ptr->data;
+  const bPoseChannel *pchan = ptr->data;
   char name_esc[sizeof(pchan->name) * 2];
 
   BLI_str_escape(name_esc, pchan->name, sizeof(name_esc));
@@ -600,7 +600,7 @@ static void rna_PoseChannel_constraints_remove(
 
   ED_object_constraint_update(bmain, ob);
 
-  /* XXX(Campbell): is this really needed? */
+  /* XXX(@campbellbarton): is this really needed? */
   BKE_constraints_active_set(&pchan->constraints, NULL);
 
   WM_main_add_notifier(NC_OBJECT | ND_CONSTRAINT | NA_REMOVED, id);
@@ -698,16 +698,18 @@ bool rna_PoseChannel_constraints_override_apply(Main *bmain,
   return true;
 }
 
-static int rna_PoseChannel_proxy_editable(PointerRNA *ptr, const char **r_info)
+static int rna_PoseChannel_proxy_editable(PointerRNA *UNUSED(ptr), const char **UNUSED(r_info))
 {
+#  if 0
   Object *ob = (Object *)ptr->owner_id;
   bArmature *arm = ob->data;
   bPoseChannel *pchan = (bPoseChannel *)ptr->data;
 
-  if (false && pchan->bone && (pchan->bone->layer & arm->layer_protected)) {
+  if (pchan->bone && (pchan->bone->layer & arm->layer_protected)) {
     *r_info = "Can't edit property of a proxy on a protected layer";
     return 0;
   }
+#  endif
 
   return PROP_EDITABLE;
 }

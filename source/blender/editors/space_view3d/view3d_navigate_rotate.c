@@ -162,10 +162,8 @@ static void viewrotate_apply_snap(ViewOpsData *vod)
 
     if (found) {
       /* lock 'quat_best' to an axis view if we can */
-      ED_view3d_quat_to_axis_view(quat_best, 0.01f, &rv3d->view, &rv3d->view_axis_roll);
-      if (rv3d->view != RV3D_VIEW_USER) {
-        ED_view3d_quat_from_axis_view(rv3d->view, rv3d->view_axis_roll, quat_best);
-      }
+      ED_view3d_quat_to_axis_view_and_reset_quat(
+          quat_best, 0.01f, &rv3d->view, &rv3d->view_axis_roll);
     }
     else {
       copy_qt_qt(quat_best, viewquat_align);
@@ -377,6 +375,7 @@ static int viewrotate_modal(bContext *C, wmOperator *op, const wmEvent *event)
   }
 
   if (ret & OPERATOR_FINISHED) {
+    ED_view3d_camera_lock_undo_push(op->type->name, vod->v3d, vod->rv3d, C);
     viewops_data_free(C, op->customdata);
     op->customdata = NULL;
   }

@@ -37,6 +37,7 @@ using blender::MultiValueMap;
 using blender::Set;
 using blender::Stack;
 using blender::StringRef;
+using blender::Vector;
 
 /* -------------------------------------------------------------------- */
 /** \name Node Group
@@ -156,9 +157,11 @@ static void group_verify_socket_list(bNodeTree &node_tree,
                                      bNode &node,
                                      const ListBase &interface_sockets,
                                      ListBase &verify_lb,
-                                     const eNodeSocketInOut in_out)
+                                     const eNodeSocketInOut in_out,
+                                     const bool ensure_extend_socket_exists)
 {
   ListBase old_sockets = verify_lb;
+  Vector<bNodeSocket *> ordered_old_sockets = old_sockets;
   BLI_listbase_clear(&verify_lb);
 
   LISTBASE_FOREACH (const bNodeSocket *, interface_socket, &interface_sockets) {
@@ -177,9 +180,33 @@ static void group_verify_socket_list(bNodeTree &node_tree,
     }
   }
 
+  if (ensure_extend_socket_exists) {
+    bNodeSocket *last_socket = static_cast<bNodeSocket *>(old_sockets.last);
+    if (last_socket != nullptr && STREQ(last_socket->identifier, "__extend__")) {
+      BLI_remlink(&old_sockets, last_socket);
+      BLI_addtail(&verify_lb, last_socket);
+    }
+    else {
+      nodeAddSocket(&node_tree, &node, in_out, "NodeSocketVirtual", "__extend__", "");
+    }
+  }
+
   /* Remove leftover sockets that didn't match the node group's interface. */
   LISTBASE_FOREACH_MUTABLE (bNodeSocket *, unused_socket, &old_sockets) {
     nodeRemoveSocket(&node_tree, &node, unused_socket);
+  }
+
+  {
+    /* Check if new sockets match the old sockets. */
+    int index;
+    LISTBASE_FOREACH_INDEX (bNodeSocket *, new_socket, &verify_lb, index) {
+      if (index < ordered_old_sockets.size()) {
+        if (ordered_old_sockets[index] != new_socket) {
+          BKE_ntree_update_tag_interface(&node_tree);
+          break;
+        }
+      }
+    }
   }
 }
 
@@ -195,8 +222,8 @@ void node_group_update(struct bNodeTree *ntree, struct bNode *node)
   }
   else {
     bNodeTree *ngroup = (bNodeTree *)node->id;
-    group_verify_socket_list(*ntree, *node, ngroup->inputs, node->inputs, SOCK_IN);
-    group_verify_socket_list(*ntree, *node, ngroup->outputs, node->outputs, SOCK_OUT);
+    group_verify_socket_list(*ntree, *node, ngroup->inputs, node->inputs, SOCK_IN, false);
+    group_verify_socket_list(*ntree, *node, ngroup->outputs, node->outputs, SOCK_OUT, false);
   }
 }
 
@@ -484,15 +511,7 @@ void node_group_input_update(bNodeTree *ntree, bNode *node)
   }
 
   BLI_freelistN(&tmplinks);
-
-  /* check inputs and outputs, and remove or insert them */
-  {
-    /* value_in_out inverted for interface nodes to get correct socket value_property */
-    group_verify_socket_list(*ntree, *node, ntree->inputs, node->outputs, SOCK_OUT);
-
-    /* add virtual extension socket */
-    nodeAddSocket(ntree, node, SOCK_OUT, "NodeSocketVirtual", "__extend__", "");
-  }
+  group_verify_socket_list(*ntree, *node, ntree->inputs, node->outputs, SOCK_OUT, true);
 }
 
 void register_node_type_group_input()
@@ -582,15 +601,7 @@ void node_group_output_update(bNodeTree *ntree, bNode *node)
   }
 
   BLI_freelistN(&tmplinks);
-
-  /* check inputs and outputs, and remove or insert them */
-  {
-    /* value_in_out inverted for interface nodes to get correct socket value_property */
-    group_verify_socket_list(*ntree, *node, ntree->outputs, node->inputs, SOCK_IN);
-
-    /* add virtual extension socket */
-    nodeAddSocket(ntree, node, SOCK_IN, "NodeSocketVirtual", "__extend__", "");
-  }
+  group_verify_socket_list(*ntree, *node, ntree->outputs, node->inputs, SOCK_IN, true);
 }
 
 void register_node_type_group_output()

@@ -49,29 +49,48 @@ namespace blender::ed::space_node {
 /** \name Utilities
  * \{ */
 
-bNode *node_add_node(const bContext &C, const char *idname, int type, float locx, float locy)
+static void position_node_based_on_mouse(bNode &node, const float2 &location)
+{
+  node.locx = location.x - NODE_DY * 1.5f / UI_DPI_FAC;
+  node.locy = location.y + NODE_DY * 0.5f / UI_DPI_FAC;
+}
+
+bNode *add_node(const bContext &C, const StringRef idname, const float2 &location)
 {
   SpaceNode &snode = *CTX_wm_space_node(&C);
   Main &bmain = *CTX_data_main(&C);
-  bNode *node = nullptr;
 
   node_deselect_all(snode);
 
-  if (idname) {
-    node = nodeAddNode(&C, snode.edittree, idname);
-  }
-  else {
-    node = nodeAddStaticNode(&C, snode.edittree, type);
-  }
+  const std::string idname_str = idname;
+
+  bNode *node = nodeAddNode(&C, snode.edittree, idname_str.c_str());
   BLI_assert(node && node->typeinfo);
 
-  /* Position mouse in node header. */
-  node->locx = locx - NODE_DY * 1.5f / UI_DPI_FAC;
-  node->locy = locy + NODE_DY * 0.5f / UI_DPI_FAC;
+  position_node_based_on_mouse(*node, location);
 
   nodeSetSelected(node, true);
-
   ED_node_set_active(&bmain, &snode, snode.edittree, node, nullptr);
+
+  ED_node_tree_propagate_change(&C, &bmain, snode.edittree);
+  return node;
+}
+
+bNode *add_static_node(const bContext &C, int type, const float2 &location)
+{
+  SpaceNode &snode = *CTX_wm_space_node(&C);
+  Main &bmain = *CTX_data_main(&C);
+
+  node_deselect_all(snode);
+
+  bNode *node = nodeAddStaticNode(&C, snode.edittree, type);
+  BLI_assert(node && node->typeinfo);
+
+  position_node_based_on_mouse(*node, location);
+
+  nodeSetSelected(node, true);
+  ED_node_set_active(&bmain, &snode, snode.edittree, node, nullptr);
+
   ED_node_tree_propagate_change(&C, &bmain, snode.edittree);
   return node;
 }
@@ -303,10 +322,8 @@ static bNodeTree *node_add_group_get_and_poll_group_node_tree(Main *bmain,
                                                               wmOperator *op,
                                                               bNodeTree *ntree)
 {
-  char name[MAX_ID_NAME - 2];
-  RNA_string_get(op->ptr, "name", name);
-
-  bNodeTree *node_group = (bNodeTree *)BKE_libblock_find_name(bmain, ID_NT, name);
+  bNodeTree *node_group = reinterpret_cast<bNodeTree *>(
+      WM_operator_properties_id_lookup_from_name_or_session_uuid(bmain, op->ptr, ID_NT));
   if (!node_group) {
     return nullptr;
   }
@@ -340,20 +357,21 @@ static int node_add_group_exec(bContext *C, wmOperator *op)
   Main *bmain = CTX_data_main(C);
   SpaceNode *snode = CTX_wm_space_node(C);
   bNodeTree *ntree = snode->edittree;
-  bNodeTree *node_group;
 
-  if (!(node_group = node_add_group_get_and_poll_group_node_tree(bmain, op, ntree))) {
+  bNodeTree *node_group = node_add_group_get_and_poll_group_node_tree(bmain, op, ntree);
+  if (!node_group) {
     return OPERATOR_CANCELLED;
   }
 
   ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
 
-  bNode *group_node = node_add_node(*C,
-                                    node_group_idname(C),
-                                    (node_group->type == NTREE_CUSTOM) ? NODE_CUSTOM_GROUP :
-                                                                         NODE_GROUP,
-                                    snode->runtime->cursor[0],
-                                    snode->runtime->cursor[1]);
+  const char *node_idname = node_group_idname(C);
+  if (node_idname[0] == '\0') {
+    BKE_report(op->reports, RPT_WARNING, "Could not determine type of group node");
+    return OPERATOR_CANCELLED;
+  }
+
+  bNode *group_node = add_node(*C, node_idname, snode->runtime->cursor);
   if (!group_node) {
     BKE_report(op->reports, RPT_WARNING, "Could not add node group");
     return OPERATOR_CANCELLED;
@@ -365,7 +383,23 @@ static int node_add_group_exec(bContext *C, wmOperator *op)
 
   nodeSetActive(ntree, group_node);
   ED_node_tree_propagate_change(C, bmain, nullptr);
+  DEG_relations_tag_update(bmain);
   return OPERATOR_FINISHED;
+}
+
+static bool node_add_group_poll(bContext *C)
+{
+  if (!ED_operator_node_editable(C)) {
+    return false;
+  }
+  const SpaceNode *snode = CTX_wm_space_node(C);
+  if (snode->edittree->type == NTREE_CUSTOM) {
+    CTX_wm_operator_poll_msg_set(C,
+                                 "This node editor displays a custom (Python defined) node tree. "
+                                 "Dropping node groups isn't supported for this");
+    return false;
+  }
+  return true;
 }
 
 static int node_add_group_invoke(bContext *C, wmOperator *op, const wmEvent *event)
@@ -396,12 +430,12 @@ void NODE_OT_add_group(wmOperatorType *ot)
   /* callbacks */
   ot->exec = node_add_group_exec;
   ot->invoke = node_add_group_invoke;
-  ot->poll = ED_operator_node_editable;
+  ot->poll = node_add_group_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 
-  RNA_def_string(ot->srna, "name", "Mask", MAX_ID_NAME - 2, "Name", "Data-block name to assign");
+  WM_operator_properties_id_lookup(ot, true);
 }
 
 /** \} */
@@ -410,33 +444,22 @@ void NODE_OT_add_group(wmOperatorType *ot)
 /** \name Add Node Object Operator
  * \{ */
 
-static Object *node_add_object_get_and_poll_object_node_tree(Main *bmain, wmOperator *op)
-{
-  if (RNA_struct_property_is_set(op->ptr, "session_uuid")) {
-    const uint32_t session_uuid = (uint32_t)RNA_int_get(op->ptr, "session_uuid");
-    return (Object *)BKE_libblock_find_session_uuid(bmain, ID_OB, session_uuid);
-  }
-
-  char name[MAX_ID_NAME - 2];
-  RNA_string_get(op->ptr, "name", name);
-  return (Object *)BKE_libblock_find_name(bmain, ID_OB, name);
-}
-
 static int node_add_object_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
   SpaceNode *snode = CTX_wm_space_node(C);
   bNodeTree *ntree = snode->edittree;
-  Object *object;
 
-  if (!(object = node_add_object_get_and_poll_object_node_tree(bmain, op))) {
+  Object *object = reinterpret_cast<Object *>(
+      WM_operator_properties_id_lookup_from_name_or_session_uuid(bmain, op->ptr, ID_OB));
+
+  if (!object) {
     return OPERATOR_CANCELLED;
   }
 
   ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
 
-  bNode *object_node = node_add_node(
-      *C, nullptr, GEO_NODE_OBJECT_INFO, snode->runtime->cursor[0], snode->runtime->cursor[1]);
+  bNode *object_node = add_static_node(*C, GEO_NODE_OBJECT_INFO, snode->runtime->cursor);
   if (!object_node) {
     BKE_report(op->reports, RPT_WARNING, "Could not add node object");
     return OPERATOR_CANCELLED;
@@ -486,8 +509,6 @@ static bool node_add_object_poll(bContext *C)
 
 void NODE_OT_add_object(wmOperatorType *ot)
 {
-  PropertyRNA *prop;
-
   /* identifiers */
   ot->name = "Add Node Object";
   ot->description = "Add an object info node to the current node editor";
@@ -501,17 +522,7 @@ void NODE_OT_add_object(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 
-  RNA_def_string(ot->srna, "name", "Object", MAX_ID_NAME - 2, "Name", "Data-block name to assign");
-  prop = RNA_def_int(ot->srna,
-                     "session_uuid",
-                     0,
-                     INT32_MIN,
-                     INT32_MAX,
-                     "Session UUID",
-                     "Session UUID of the data-block to assign",
-                     INT32_MIN,
-                     INT32_MAX);
-  RNA_def_property_flag(prop, (PropertyFlag)(PROP_HIDDEN | PROP_SKIP_SAVE));
+  WM_operator_properties_id_lookup(ot, true);
 }
 
 /** \} */
@@ -520,34 +531,22 @@ void NODE_OT_add_object(wmOperatorType *ot)
 /** \name Add Node Collection Operator
  * \{ */
 
-static Collection *node_add_collection_get_and_poll_collection_node_tree(Main *bmain,
-                                                                         wmOperator *op)
-{
-  if (RNA_struct_property_is_set(op->ptr, "session_uuid")) {
-    const uint32_t session_uuid = (uint32_t)RNA_int_get(op->ptr, "session_uuid");
-    return (Collection *)BKE_libblock_find_session_uuid(bmain, ID_GR, session_uuid);
-  }
-
-  char name[MAX_ID_NAME - 2];
-  RNA_string_get(op->ptr, "name", name);
-  return (Collection *)BKE_libblock_find_name(bmain, ID_GR, name);
-}
-
 static int node_add_collection_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
   SpaceNode &snode = *CTX_wm_space_node(C);
-  bNodeTree *ntree = snode.edittree;
-  Collection *collection;
+  bNodeTree &ntree = *snode.edittree;
 
-  if (!(collection = node_add_collection_get_and_poll_collection_node_tree(bmain, op))) {
+  Collection *collection = reinterpret_cast<Collection *>(
+      WM_operator_properties_id_lookup_from_name_or_session_uuid(bmain, op->ptr, ID_GR));
+
+  if (!collection) {
     return OPERATOR_CANCELLED;
   }
 
   ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
 
-  bNode *collection_node = node_add_node(
-      *C, nullptr, GEO_NODE_COLLECTION_INFO, snode.runtime->cursor[0], snode.runtime->cursor[1]);
+  bNode *collection_node = add_static_node(*C, GEO_NODE_COLLECTION_INFO, snode.runtime->cursor);
   if (!collection_node) {
     BKE_report(op->reports, RPT_WARNING, "Could not add node collection");
     return OPERATOR_CANCELLED;
@@ -563,8 +562,8 @@ static int node_add_collection_exec(bContext *C, wmOperator *op)
   socket_data->value = collection;
   id_us_plus(&collection->id);
 
-  nodeSetActive(ntree, collection_node);
-  ED_node_tree_propagate_change(C, bmain, ntree);
+  nodeSetActive(&ntree, collection_node);
+  ED_node_tree_propagate_change(C, bmain, &ntree);
   DEG_relations_tag_update(bmain);
 
   return OPERATOR_FINISHED;
@@ -597,8 +596,6 @@ static bool node_add_collection_poll(bContext *C)
 
 void NODE_OT_add_collection(wmOperatorType *ot)
 {
-  PropertyRNA *prop;
-
   /* identifiers */
   ot->name = "Add Node Collection";
   ot->description = "Add an collection info node to the current node editor";
@@ -612,18 +609,7 @@ void NODE_OT_add_collection(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 
-  RNA_def_string(
-      ot->srna, "name", "Collection", MAX_ID_NAME - 2, "Name", "Data-block name to assign");
-  prop = RNA_def_int(ot->srna,
-                     "session_uuid",
-                     0,
-                     INT32_MIN,
-                     INT32_MAX,
-                     "Session UUID",
-                     "Session UUID of the data-block to assign",
-                     INT32_MIN,
-                     INT32_MAX);
-  RNA_def_property_flag(prop, (PropertyFlag)(PROP_HIDDEN | PROP_SKIP_SAVE));
+  WM_operator_properties_id_lookup(ot, true);
 }
 
 /** \} */
@@ -643,11 +629,9 @@ static int node_add_file_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
   SpaceNode &snode = *CTX_wm_space_node(C);
-  bNode *node;
-  Image *ima;
   int type = 0;
 
-  ima = (Image *)WM_operator_drop_load_path(C, op, ID_IM);
+  Image *ima = (Image *)WM_operator_drop_load_path(C, op, ID_IM);
   if (!ima) {
     return OPERATOR_CANCELLED;
   }
@@ -671,7 +655,7 @@ static int node_add_file_exec(bContext *C, wmOperator *op)
 
   ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
 
-  node = node_add_node(*C, nullptr, type, snode.runtime->cursor[0], snode.runtime->cursor[1]);
+  bNode *node = add_static_node(*C, type, snode.runtime->cursor);
 
   if (!node) {
     BKE_report(op->reports, RPT_WARNING, "Could not add an image node");
@@ -716,8 +700,8 @@ static int node_add_file_invoke(bContext *C, wmOperator *op, const wmEvent *even
   snode->runtime->cursor[0] /= UI_DPI_FAC;
   snode->runtime->cursor[1] /= UI_DPI_FAC;
 
-  if (RNA_struct_property_is_set(op->ptr, "filepath") ||
-      RNA_struct_property_is_set(op->ptr, "name")) {
+  if (WM_operator_properties_id_lookup_is_set(op->ptr) ||
+      RNA_struct_property_is_set(op->ptr, "filepath")) {
     return node_add_file_exec(C, op);
   }
   return WM_operator_filesel(C, op, event);
@@ -745,7 +729,7 @@ void NODE_OT_add_file(wmOperatorType *ot)
                                  WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
                                  FILE_SORT_DEFAULT);
-  RNA_def_string(ot->srna, "name", "Image", MAX_ID_NAME - 2, "Name", "Data-block name to assign");
+  WM_operator_properties_id_lookup(ot, true);
 }
 
 /** \} */
@@ -753,18 +737,6 @@ void NODE_OT_add_file(wmOperatorType *ot)
 /* -------------------------------------------------------------------- */
 /** \name Add Mask Node Operator
  * \{ */
-
-static ID *node_add_mask_get_and_poll_mask(Main *bmain, wmOperator *op)
-{
-  if (RNA_struct_property_is_set(op->ptr, "session_uuid")) {
-    const uint32_t session_uuid = (uint32_t)RNA_int_get(op->ptr, "session_uuid");
-    return BKE_libblock_find_session_uuid(bmain, ID_MSK, session_uuid);
-  }
-
-  char name[MAX_ID_NAME - 2];
-  RNA_string_get(op->ptr, "name", name);
-  return BKE_libblock_find_name(bmain, ID_MSK, name);
-}
 
 static bool node_add_mask_poll(bContext *C)
 {
@@ -777,17 +749,15 @@ static int node_add_mask_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
   SpaceNode &snode = *CTX_wm_space_node(C);
-  bNode *node;
 
-  ID *mask = node_add_mask_get_and_poll_mask(bmain, op);
+  ID *mask = WM_operator_properties_id_lookup_from_name_or_session_uuid(bmain, op->ptr, ID_MSK);
   if (!mask) {
     return OPERATOR_CANCELLED;
   }
 
   ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
 
-  node = node_add_node(
-      *C, nullptr, CMP_NODE_MASK, snode.runtime->cursor[0], snode.runtime->cursor[1]);
+  bNode *node = add_static_node(*C, CMP_NODE_MASK, snode.runtime->cursor);
 
   if (!node) {
     BKE_report(op->reports, RPT_WARNING, "Could not add a mask node");
@@ -805,8 +775,6 @@ static int node_add_mask_exec(bContext *C, wmOperator *op)
 
 void NODE_OT_add_mask(wmOperatorType *ot)
 {
-  PropertyRNA *prop;
-
   /* identifiers */
   ot->name = "Add Mask Node";
   ot->description = "Add a mask node to the current node editor";
@@ -819,17 +787,7 @@ void NODE_OT_add_mask(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 
-  RNA_def_string(ot->srna, "name", "Mask", MAX_ID_NAME - 2, "Name", "Data-block name to assign");
-  prop = RNA_def_int(ot->srna,
-                     "session_uuid",
-                     0,
-                     INT32_MIN,
-                     INT32_MAX,
-                     "Session UUID",
-                     "Session UUID of the data-block to assign",
-                     INT32_MIN,
-                     INT32_MAX);
-  RNA_def_property_flag(prop, (PropertyFlag)(PROP_HIDDEN | PROP_SKIP_SAVE));
+  WM_operator_properties_id_lookup(ot, true);
 }
 
 /** \} */

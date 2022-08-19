@@ -23,6 +23,7 @@
 #ifdef RNA_RUNTIME
 
 #  include "RNA_access.h"
+#  include "RNA_path.h"
 
 #  include "DNA_image_types.h"
 #  include "DNA_material_types.h"
@@ -157,7 +158,7 @@ static void rna_CurveMapping_clipmaxy_range(
   *max = 100.0f;
 }
 
-static char *rna_ColorRamp_path(PointerRNA *ptr)
+static char *rna_ColorRamp_path(const PointerRNA *ptr)
 {
   char *path = NULL;
 
@@ -208,7 +209,7 @@ static char *rna_ColorRamp_path(PointerRNA *ptr)
   return path;
 }
 
-static char *rna_ColorRampElement_path(PointerRNA *ptr)
+static char *rna_ColorRampElement_path(const PointerRNA *ptr)
 {
   PointerRNA ramp_ptr;
   PropertyRNA *prop;
@@ -438,7 +439,7 @@ static void rna_ColorManagedDisplaySettings_display_device_update(Main *bmain,
   }
 }
 
-static char *rna_ColorManagedDisplaySettings_path(PointerRNA *UNUSED(ptr))
+static char *rna_ColorManagedDisplaySettings_path(const PointerRNA *UNUSED(ptr))
 {
   return BLI_strdup("display_settings");
 }
@@ -526,7 +527,7 @@ static void rna_ColorManagedViewSettings_use_curves_set(PointerRNA *ptr, bool va
   }
 }
 
-static char *rna_ColorManagedViewSettings_path(PointerRNA *UNUSED(ptr))
+static char *rna_ColorManagedViewSettings_path(const PointerRNA *UNUSED(ptr))
 {
   return BLI_strdup("view_settings");
 }
@@ -662,12 +663,12 @@ static void rna_ColorManagedColorspaceSettings_reload_update(Main *bmain,
   }
 }
 
-static char *rna_ColorManagedSequencerColorspaceSettings_path(PointerRNA *UNUSED(ptr))
+static char *rna_ColorManagedSequencerColorspaceSettings_path(const PointerRNA *UNUSED(ptr))
 {
   return BLI_strdup("sequencer_colorspace_settings");
 }
 
-static char *rna_ColorManagedInputColorspaceSettings_path(PointerRNA *UNUSED(ptr))
+static char *rna_ColorManagedInputColorspaceSettings_path(const PointerRNA *UNUSED(ptr))
 {
   return BLI_strdup("colorspace_settings");
 }
@@ -1270,7 +1271,7 @@ static void rna_def_colormanage(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Use Curves", "Use RGB curved for pre-display transformation");
   RNA_def_property_update(prop, NC_WINDOW, "rna_ColorManagement_update");
 
-  /* ** Colorspace ** */
+  /* ** Color-space ** */
   srna = RNA_def_struct(brna, "ColorManagedInputColorspaceSettings", NULL);
   RNA_def_struct_path_func(srna, "rna_ColorManagedInputColorspaceSettings_path");
   RNA_def_struct_ui_text(

@@ -50,7 +50,7 @@ ccl_device_inline bool kernel_shadow_catcher_is_path_split_bounce(KernelGlobals 
 ccl_device_inline bool kernel_shadow_catcher_path_can_split(KernelGlobals kg,
                                                             ConstIntegratorState state)
 {
-  if (INTEGRATOR_PATH_IS_TERMINATED) {
+  if (integrator_path_is_terminated(state)) {
     return false;
   }
 
@@ -93,7 +93,7 @@ ccl_device_forceinline void kernel_write_shadow_catcher_bounce_data(
 
   /* Since the split is done, the sample does not contribute to the matte, so accumulate it as
    * transparency to the matte. */
-  const float3 throughput = INTEGRATOR_STATE(state, path, throughput);
+  const Spectrum throughput = INTEGRATOR_STATE(state, path, throughput);
   kernel_write_pass_float(buffer + kernel_data.film.pass_shadow_catcher_matte + 3,
                           average(throughput));
 }

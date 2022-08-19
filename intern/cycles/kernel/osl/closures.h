@@ -114,7 +114,9 @@ class CBSDFClosure : public CClosurePrimitive {
     void setup(ShaderData *sd, uint32_t path_flag, float3 weight) \
     { \
       if (!skip(sd, path_flag, TYPE)) { \
-        structname *bsdf = (structname *)bsdf_alloc_osl(sd, sizeof(structname), weight, &params); \
+        params.N = ensure_valid_reflection(sd->Ng, sd->I, params.N); \
+        structname *bsdf = (structname *)bsdf_alloc_osl( \
+            sd, sizeof(structname), rgb_to_spectrum(weight), &params); \
         sd->flag |= (bsdf) ? bsdf_##lower##_setup(bsdf) : 0; \
       } \
     } \

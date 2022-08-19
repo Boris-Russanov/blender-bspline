@@ -71,6 +71,7 @@
 #include "BKE_lib_override.h"
 #include "BKE_lib_remap.h"
 #include "BKE_main.h"
+#include "BKE_main_namemap.h"
 #include "BKE_packedFile.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
@@ -846,8 +847,13 @@ static void file_read_reports_finalize(BlendFileReadReport *bf_reports)
                 bf_reports->count.missing_obproxies);
   }
   else {
-    BLI_assert(bf_reports->count.missing_obdata == 0);
-    BLI_assert(bf_reports->count.missing_obproxies == 0);
+    if (bf_reports->count.missing_obdata != 0 || bf_reports->count.missing_obproxies != 0) {
+      CLOG_ERROR(&LOG,
+                 "%d local ObjectData and %d local Object proxies are reported to be missing, "
+                 "this should never happen",
+                 bf_reports->count.missing_obdata,
+                 bf_reports->count.missing_obproxies);
+    }
   }
 
   if (bf_reports->resynced_lib_overrides_libraries_count != 0) {
@@ -999,6 +1005,8 @@ bool WM_file_read(bContext *C, const char *filepath, ReportList *reports)
 
   WM_cursor_wait(false);
 
+  BLI_assert(BKE_main_namemap_validate(CTX_data_main(C)));
+
   return success;
 }
 
@@ -1091,7 +1099,7 @@ void wm_homefile_read_ex(bContext *C,
   const bool reset_app_template = ((!app_template && U.app_template[0]) ||
                                    (app_template && !STREQ(app_template, U.app_template)));
 
-  /* options exclude eachother */
+  /* Options exclude each other. */
   BLI_assert((use_factory_settings && filepath_startup_override) == 0);
 
   if ((G.f & G_FLAG_SCRIPT_OVERRIDE_PREF) == 0) {
@@ -1760,9 +1768,11 @@ static bool wm_file_write(bContext *C,
   /* Enforce full override check/generation on file save. */
   BKE_lib_override_library_main_operations_create(bmain, true);
 
-  /* NOTE: Ideally we would call `WM_redraw_windows` here to remove any open menus. But we
-   * can crash if saving from a script, see T92704 & T97627. Just checking `!G.background
-   * && BLI_thread_is_main()` is not sufficient to fix this. */
+  /* NOTE: Ideally we would call `WM_redraw_windows` here to remove any open menus.
+   * But we can crash if saving from a script, see T92704 & T97627.
+   * Just checking `!G.background && BLI_thread_is_main()` is not sufficient to fix this.
+   * Additionally some some EGL configurations don't support reading the front-buffer
+   * immediately after drawing, see: T98462. In that case off-screen drawing is necessary. */
 
   /* don't forget not to return without! */
   WM_cursor_wait(true);
@@ -1879,9 +1889,6 @@ static void wm_autosave_location(char *filepath)
 {
   const int pid = abs(getpid());
   char path[1024];
-#ifdef WIN32
-  const char *savedir;
-#endif
 
   /* Normally there is no need to check for this to be NULL,
    * however this runs on exit when it may be cleared. */
@@ -1907,7 +1914,7 @@ static void wm_autosave_location(char *filepath)
    * through BLI_windows_get_default_root_dir().
    * If there is no C:\tmp autosave fails. */
   if (!BLI_exists(BKE_tempdir_base())) {
-    savedir = BKE_appdir_folder_id_create(BLENDER_USER_AUTOSAVE, NULL);
+    const char *savedir = BKE_appdir_folder_id_create(BLENDER_USER_AUTOSAVE, NULL);
     BLI_make_file_string("/", filepath, savedir, path);
     return;
   }
@@ -3058,8 +3065,7 @@ static int wm_save_as_mainfile_exec(bContext *C, wmOperator *op)
   Main *bmain = CTX_data_main(C);
   char path[FILE_MAX];
   const bool is_save_as = (op->type->invoke == wm_save_as_mainfile_invoke);
-  const bool use_save_as_copy = (RNA_struct_property_is_set(op->ptr, "copy") &&
-                                 RNA_boolean_get(op->ptr, "copy"));
+  const bool use_save_as_copy = is_save_as && RNA_boolean_get(op->ptr, "copy");
 
   /* We could expose all options to the users however in most cases remapping
    * existing relative paths is a good default.

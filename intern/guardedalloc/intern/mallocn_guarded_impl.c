@@ -54,7 +54,7 @@
 #  define DEBUG_MEMCOUNTER_ERROR_VAL 0
 static int _mallocn_count = 0;
 
-/* breakpoint here */
+/* Break-point here. */
 static void memcount_raise(const char *name)
 {
   fprintf(stderr, "%s: memcount-leak, %d\n", name, _mallocn_count);
@@ -1198,5 +1198,19 @@ const char *MEM_guarded_name_ptr(void *vmemh)
   }
 
   return "MEM_guarded_name_ptr(NULL)";
+}
+
+void MEM_guarded_name_ptr_set(void *vmemh, const char *str)
+{
+  if (!vmemh) {
+    return;
+  }
+
+  MemHead *memh = vmemh;
+  memh--;
+  memh->name = str;
+  if (memh->prev) {
+    MEMNEXT(memh->prev)->nextname = str;
+  }
 }
 #endif /* NDEBUG */

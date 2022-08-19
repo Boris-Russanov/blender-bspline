@@ -48,7 +48,7 @@ static float nextfr(RNG *rng, float min, float max)
 static float gaussRand(RNG *rng)
 {
   /* NOTE: to avoid numerical problems with very small numbers, we make these variables
-   * singe-precision floats, but later we call the double-precision log() and sqrt() functions
+   * single-precision floats, but later we call the double-precision log() and sqrt() functions
    * instead of logf() and sqrtf(). */
   float x;
   float y;
@@ -1385,9 +1385,8 @@ void BKE_ocean_bake(struct Ocean *o,
                     void (*update_cb)(void *, float progress, int *cancel),
                     void *update_cb_data)
 {
-  /* NOTE(campbell): some of these values remain uninitialized unless certain options
-   * are enabled, take care that BKE_ocean_eval_ij() initializes a member
-   * before use. */
+  /* NOTE(@campbellbarton): some of these values remain uninitialized unless certain options
+   * are enabled, take care that #BKE_ocean_eval_ij() initializes a member before use. */
   OceanResult ocr;
 
   ImageFormatData imf = {0};
@@ -1441,7 +1440,7 @@ void BKE_ocean_bake(struct Ocean *o,
         rgb_to_rgba_unit_alpha(&ibuf_disp->rect_float[4 * (res_x * y + x)], ocr.disp);
 
         if (o->_do_jacobian) {
-          /* TODO(campbell): cleanup unused code. */
+          /* TODO(@campbellbarton): cleanup unused code. */
 
           float /* r, */ /* UNUSED */ pr = 0.0f, foam_result;
           float neg_disp, neg_eplus;

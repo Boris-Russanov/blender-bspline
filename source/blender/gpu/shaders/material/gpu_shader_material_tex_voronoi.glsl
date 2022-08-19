@@ -1,5 +1,5 @@
-#pragma BLENDER_REQUIRE(gpu_shader_material_hash.glsl)
-#pragma BLENDER_REQUIRE(gpu_shader_material_math_util.glsl)
+#pragma BLENDER_REQUIRE(gpu_shader_common_hash.glsl)
+#pragma BLENDER_REQUIRE(gpu_shader_common_math_utils.glsl)
 
 /*
  * Original code is under the MIT License, Copyright (c) 2013 Inigo Quilez.
@@ -15,7 +15,6 @@
  *
  * With optimization to change -2..2 scan window to -1..1 for better performance,
  * as explained in https://www.shadertoy.com/view/llG3zy.
- *
  */
 
 /* **** 1D Voronoi **** */

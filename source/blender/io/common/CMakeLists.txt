@@ -8,7 +8,7 @@ set(INC
   ../../depsgraph
   ../../makesdna
   ../../../../intern/guardedalloc
-  ../../../../extern/fast_float
+  ../../makesrna
 )
 
 set(INC_SYS
@@ -19,11 +19,14 @@ set(SRC
   intern/dupli_parent_finder.cc
   intern/dupli_persistent_id.cc
   intern/object_identifier.cc
-  intern/string_utils.cc
+  intern/orientation.c
+  intern/path_util.cc
 
   IO_abstract_hierarchy_iterator.h
   IO_dupli_persistent_id.hh
-  IO_string_utils.hh
+  IO_orientation.h
+  IO_path_util.hh
+  IO_path_util_types.h
   IO_types.h
   intern/dupli_parent_finder.hh
 )
@@ -42,7 +45,6 @@ if(WITH_GTESTS)
     intern/abstract_hierarchy_iterator_test.cc
     intern/hierarchy_context_order_test.cc
     intern/object_identifier_test.cc
-    intern/string_utils_test.cc
   )
   set(TEST_INC
     ../../blenloader

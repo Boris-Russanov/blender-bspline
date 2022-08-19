@@ -636,7 +636,8 @@ bToolRef *WM_toolsystem_ref_set_by_id_ex(
   /* Some contexts use the current space type (image editor for e.g.),
    * ensure this is set correctly or there is no area. */
 #ifndef NDEBUG
-  {
+  /* Exclude this check for some space types where the space type isn't used. */
+  if ((1 << tkey->space_type) & WM_TOOLSYSTEM_SPACE_MASK_MODE_FROM_SPACE) {
     ScrArea *area = CTX_wm_area(C);
     BLI_assert(area == NULL || area->spacetype == tkey->space_type);
   }
@@ -704,7 +705,7 @@ static const char *toolsystem_default_tool(const bToolKey *tkey)
         case CTX_MODE_VERTEX_GPENCIL:
           return "builtin_brush.Draw";
         case CTX_MODE_SCULPT_CURVES:
-          return "builtin_brush.Comb";
+          return "builtin_brush.density";
           /* end temporary hack. */
 
         case CTX_MODE_PARTICLE:

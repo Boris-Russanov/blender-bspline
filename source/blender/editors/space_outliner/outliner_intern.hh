@@ -42,21 +42,25 @@ class AbstractTreeDisplay;
 class AbstractTreeElement;
 }  // namespace blender::ed::outliner
 
+namespace blender::bke::outliner::treehash {
+class TreeHash;
+}
+
 namespace outliner = blender::ed::outliner;
+namespace treehash = blender::bke::outliner::treehash;
 
 struct SpaceOutliner_Runtime {
   /** Object to create and manage the tree for a specific display type (View Layers, Scenes,
    * Blender File, etc.). */
   std::unique_ptr<outliner::AbstractTreeDisplay> tree_display;
 
-  /** Pointers to tree-store elements, grouped by `(id, type, nr)`
-   *  in hash-table for faster searching. */
-  struct GHash *treehash;
+  /* Hash table for tree-store elements, using `(id, type, index)` as key. */
+  std::unique_ptr<treehash::TreeHash> tree_hash;
 
   SpaceOutliner_Runtime() = default;
   /** Used for copying runtime data to a duplicated space. */
   SpaceOutliner_Runtime(const SpaceOutliner_Runtime &);
-  ~SpaceOutliner_Runtime();
+  ~SpaceOutliner_Runtime() = default;
 };
 
 typedef enum TreeElementInsertType {
@@ -160,8 +164,6 @@ enum {
   /* Child elements of the same type in the icon-row are drawn merged as one icon.
    * This flag is set for an element that is part of these merged child icons. */
   TE_ICONROW_MERGED = (1 << 7),
-  /* This element has some warning to be displayed. */
-  TE_HAS_WARNING = (1 << 8),
 };
 
 /* button events */
@@ -410,8 +412,12 @@ int outliner_flag_is_any_test(ListBase *lb, short flag, int curlevel);
  * Set or unset \a flag for all outliner elements in \a lb and sub-trees.
  * \return if any flag was modified.
  */
-bool outliner_flag_set(ListBase *lb, short flag, short set);
-bool outliner_flag_flip(ListBase *lb, short flag);
+extern "C++" {
+bool outliner_flag_set(const SpaceOutliner &space_outliner, short flag, short set);
+bool outliner_flag_set(const ListBase &lb, short flag, short set);
+bool outliner_flag_flip(const SpaceOutliner &space_outliner, short flag);
+bool outliner_flag_flip(const ListBase &lb, short flag);
+}
 
 void item_rename_fn(struct bContext *C,
                     struct ReportList *reports,
@@ -435,13 +441,13 @@ void lib_reload_fn(struct bContext *C,
                    struct TreeStoreElem *tselem,
                    void *user_data);
 
-void id_delete_fn(struct bContext *C,
-                  struct ReportList *reports,
-                  struct Scene *scene,
-                  struct TreeElement *te,
-                  struct TreeStoreElem *tsep,
-                  struct TreeStoreElem *tselem,
-                  void *user_data);
+void id_delete_tag_fn(struct bContext *C,
+                      struct ReportList *reports,
+                      struct Scene *scene,
+                      struct TreeElement *te,
+                      struct TreeStoreElem *tsep,
+                      struct TreeStoreElem *tselem,
+                      void *user_data);
 void id_remap_fn(struct bContext *C,
                  struct ReportList *reports,
                  struct Scene *scene,
@@ -453,7 +459,8 @@ void id_remap_fn(struct bContext *C,
 /**
  * To retrieve coordinates with redrawing the entire tree.
  */
-void outliner_set_coordinates(struct ARegion *region, struct SpaceOutliner *space_outliner);
+void outliner_set_coordinates(const struct ARegion *region,
+                              const struct SpaceOutliner *space_outliner);
 
 /**
  * Open or close a tree element, optionally toggling all children recursively.
@@ -510,6 +517,11 @@ void OUTLINER_OT_drivers_delete_selected(struct wmOperatorType *ot);
 
 void OUTLINER_OT_orphans_purge(struct wmOperatorType *ot);
 
+/* outliner_query.cc ---------------------------------------------- */
+
+bool outliner_shows_mode_column(const SpaceOutliner &space_outliner);
+bool outliner_has_element_warnings(const SpaceOutliner &space_outliner);
+
 /* outliner_tools.c ---------------------------------------------- */
 
 void merged_element_search_menu_invoke(struct bContext *C,
@@ -522,6 +534,8 @@ void OUTLINER_OT_operation(struct wmOperatorType *ot);
 void OUTLINER_OT_scene_operation(struct wmOperatorType *ot);
 void OUTLINER_OT_object_operation(struct wmOperatorType *ot);
 void OUTLINER_OT_lib_operation(struct wmOperatorType *ot);
+void OUTLINER_OT_liboverride_operation(struct wmOperatorType *ot);
+void OUTLINER_OT_liboverride_troubleshoot_operation(struct wmOperatorType *ot);
 void OUTLINER_OT_id_operation(struct wmOperatorType *ot);
 void OUTLINER_OT_id_remap(struct wmOperatorType *ot);
 void OUTLINER_OT_id_copy(struct wmOperatorType *ot);
@@ -601,10 +615,6 @@ TreeElement *outliner_find_item_at_x_in_row(const SpaceOutliner *space_outliner,
                                             float view_co_x,
                                             bool *r_is_merged_icon,
                                             bool *r_is_over_icon);
-/**
- * `tse` is not in the tree-store, we use its contents to find a match.
- */
-TreeElement *outliner_find_tse(struct SpaceOutliner *space_outliner, const TreeStoreElem *tse);
 /**
  * Find specific item from the trees-tore.
  */

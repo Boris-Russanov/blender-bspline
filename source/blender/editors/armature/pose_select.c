@@ -166,7 +166,7 @@ bool ED_armature_pose_select_pick_bone(ViewLayer *view_layer,
 
     /* Since we do unified select, we don't shift+select a bone if the
      * armature object was not active yet.
-     * NOTE(campbell): special exception for armature mode so we can do multi-select
+     * NOTE(@campbellbarton): special exception for armature mode so we can do multi-select
      * we could check for multi-select explicitly but think its fine to
      * always give predictable behavior in weight paint mode. */
     if ((ob_act == NULL) || ((ob_act != ob) && (ob_act->mode & OB_MODE_ALL_WEIGHT_PAINT) == 0)) {
@@ -680,13 +680,10 @@ static int pose_select_constraint_target_exec(bContext *C, wmOperator *UNUSED(op
   CTX_DATA_BEGIN (C, bPoseChannel *, pchan, visible_pose_bones) {
     if (pchan->bone->flag & BONE_SELECTED) {
       for (con = pchan->constraints.first; con; con = con->next) {
-        const bConstraintTypeInfo *cti = BKE_constraint_typeinfo_get(con);
         ListBase targets = {NULL, NULL};
         bConstraintTarget *ct;
 
-        if (cti && cti->get_constraint_targets) {
-          cti->get_constraint_targets(con, &targets);
-
+        if (BKE_constraint_targets_get(con, &targets)) {
           for (ct = targets.first; ct; ct = ct->next) {
             Object *ob = ct->tar;
 
@@ -702,9 +699,7 @@ static int pose_select_constraint_target_exec(bContext *C, wmOperator *UNUSED(op
             }
           }
 
-          if (cti->flush_constraint_targets) {
-            cti->flush_constraint_targets(con, &targets, 1);
-          }
+          BKE_constraint_targets_flush(con, &targets, 1);
         }
       }
     }

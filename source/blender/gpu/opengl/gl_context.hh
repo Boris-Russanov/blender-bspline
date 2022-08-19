@@ -16,8 +16,6 @@
 
 #include "gl_state.hh"
 
-#include "glew-mx.h"
-
 #include <mutex>
 
 namespace blender {
@@ -106,6 +104,8 @@ class GLContext : public Context {
 
   void activate() override;
   void deactivate() override;
+  void begin_frame() override;
+  void end_frame() override;
 
   void flush() override;
   void finish() override;

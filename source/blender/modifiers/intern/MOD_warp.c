@@ -171,7 +171,7 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
   }
 
   if (need_transform_relation) {
-    DEG_add_modifier_to_transform_relation(ctx->node, "Warp Modifier");
+    DEG_add_depends_on_transform_relation(ctx->node, "Warp Modifier");
   }
 }
 
@@ -302,7 +302,6 @@ static void warpModifier_do(WarpModifierData *wmd,
       if (tex_co) {
         struct Scene *scene = DEG_get_evaluated_scene(ctx->depsgraph);
         TexResult texres;
-        texres.nor = NULL;
         BKE_texture_get_value(scene, tex_target, tex_co[i], &texres, false);
         fac *= texres.tin;
       }
@@ -349,7 +348,7 @@ static void deformVerts(ModifierData *md,
 
   if (wmd->defgrp_name[0] != '\0' || wmd->texture != NULL) {
     /* mesh_src is only needed for vgroups and textures. */
-    mesh_src = MOD_deform_mesh_eval_get(ctx->object, NULL, mesh, NULL, verts_num, false, false);
+    mesh_src = MOD_deform_mesh_eval_get(ctx->object, NULL, mesh, NULL, verts_num, false);
   }
 
   warpModifier_do(wmd, ctx, mesh_src, vertexCos, verts_num);
@@ -371,10 +370,10 @@ static void deformVertsEM(ModifierData *md,
 
   if (wmd->defgrp_name[0] != '\0' || wmd->texture != NULL) {
     /* mesh_src is only needed for vgroups and textures. */
-    mesh_src = MOD_deform_mesh_eval_get(ctx->object, em, mesh, NULL, verts_num, false, false);
+    mesh_src = MOD_deform_mesh_eval_get(ctx->object, em, mesh, NULL, verts_num, false);
   }
 
-  /* TODO(Campbell): use edit-mode data only (remove this line). */
+  /* TODO(@campbellbarton): use edit-mode data only (remove this line). */
   if (mesh_src != NULL) {
     BKE_mesh_wrapper_ensure_mdata(mesh_src);
   }
@@ -489,27 +488,29 @@ static void panelRegister(ARegionType *region_type)
       region_type, "texture", "Texture", NULL, texture_panel_draw, panel_type);
 }
 
-static void blendWrite(BlendWriter *writer, const ModifierData *md)
+static void blendWrite(BlendWriter *writer, const ID *UNUSED(id_owner), const ModifierData *md)
 {
-  const WarpModifierData *tmd = (const WarpModifierData *)md;
+  const WarpModifierData *wmd = (const WarpModifierData *)md;
 
-  if (tmd->curfalloff) {
-    BKE_curvemapping_blend_write(writer, tmd->curfalloff);
+  BLO_write_struct(writer, WarpModifierData, wmd);
+
+  if (wmd->curfalloff) {
+    BKE_curvemapping_blend_write(writer, wmd->curfalloff);
   }
 }
 
 static void blendRead(BlendDataReader *reader, ModifierData *md)
 {
-  WarpModifierData *tmd = (WarpModifierData *)md;
+  WarpModifierData *wmd = (WarpModifierData *)md;
 
-  BLO_read_data_address(reader, &tmd->curfalloff);
-  if (tmd->curfalloff) {
-    BKE_curvemapping_blend_read(reader, tmd->curfalloff);
+  BLO_read_data_address(reader, &wmd->curfalloff);
+  if (wmd->curfalloff) {
+    BKE_curvemapping_blend_read(reader, wmd->curfalloff);
   }
 }
 
 ModifierTypeInfo modifierType_Warp = {
-    /* name */ "Warp",
+    /* name */ N_("Warp"),
     /* structName */ "WarpModifierData",
     /* structSize */ sizeof(WarpModifierData),
     /* srna */ &RNA_WarpModifier,

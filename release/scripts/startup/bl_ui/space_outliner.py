@@ -1,6 +1,4 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-
-# <pep8 compliant>
 import bpy
 from bpy.types import Header, Menu, Panel
 
@@ -57,7 +55,7 @@ class OUTLINER_HT_header(Header):
             layout.operator("outliner.collection_new", text="", icon='COLLECTION_NEW').nested = True
 
         elif display_mode == 'ORPHAN_DATA':
-            layout.operator("outliner.orphans_purge", text="Purge")
+            layout.operator("outliner.orphans_purge", text="Purge").do_recursive = True
 
         elif space.display_mode == 'DATA_API':
             layout.separator()
@@ -96,6 +94,10 @@ class OUTLINER_MT_context_menu(Menu):
     @staticmethod
     def draw_common_operators(layout):
         layout.menu_contents("OUTLINER_MT_asset")
+
+        layout.separator()
+
+        layout.menu("OUTLINER_MT_liboverride")
 
         layout.separator()
 
@@ -322,6 +324,27 @@ class OUTLINER_MT_asset(Menu):
         layout.operator("asset.clear", text="Clear Asset (Set Fake User)").set_fake_user = True
 
 
+class OUTLINER_MT_liboverride(Menu):
+    bl_label = "Library Override"
+
+    def draw(self, _context):
+        layout = self.layout
+
+        layout.operator_menu_enum("outliner.liboverride_operation", "selection_set",
+                                  text="Make").type = 'OVERRIDE_LIBRARY_CREATE_HIERARCHY'
+        layout.operator_menu_enum(
+            "outliner.liboverride_operation",
+            "selection_set",
+            text="Reset").type = 'OVERRIDE_LIBRARY_RESET'
+        layout.operator_menu_enum("outliner.liboverride_operation", "selection_set",
+                                  text="Clear").type = 'OVERRIDE_LIBRARY_CLEAR_SINGLE'
+
+        layout.separator()
+
+        layout.operator_menu_enum("outliner.liboverride_troubleshoot_operation", "type",
+                                  text="Troubleshoot").selection_set = 'SELECTED'
+
+
 class OUTLINER_PT_filter(Panel):
     bl_space_type = 'OUTLINER'
     bl_region_type = 'HEADER'
@@ -459,6 +482,7 @@ classes = (
     OUTLINER_MT_collection_view_layer,
     OUTLINER_MT_object,
     OUTLINER_MT_asset,
+    OUTLINER_MT_liboverride,
     OUTLINER_MT_context_menu,
     OUTLINER_MT_context_menu_view,
     OUTLINER_MT_view_pie,

@@ -162,7 +162,7 @@ static void collection_foreach_id(ID *id, LibraryForeachIDData *data)
   }
 }
 
-static ID *collection_owner_get(Main *bmain, ID *id)
+static ID *collection_owner_get(Main *bmain, ID *id, ID *owner_id_hint)
 {
   if ((id->flag & LIB_EMBEDDED_DATA) == 0) {
     return id;
@@ -171,6 +171,11 @@ static ID *collection_owner_get(Main *bmain, ID *id)
 
   Collection *master_collection = (Collection *)id;
   BLI_assert((master_collection->flag & COLLECTION_IS_MASTER) != 0);
+
+  if (owner_id_hint != NULL && GS(owner_id_hint->name) == ID_SCE &&
+      ((Scene *)owner_id_hint)->master_collection == master_collection) {
+    return owner_id_hint;
+  }
 
   LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
     if (scene->master_collection == master_collection) {
@@ -710,10 +715,11 @@ void BKE_collection_new_name_get(Collection *collection_parent, char *rname)
   char *name;
 
   if (!collection_parent) {
-    name = BLI_strdup("Collection");
+    name = BLI_strdup(DATA_("Collection"));
   }
   else if (collection_parent->flag & COLLECTION_IS_MASTER) {
-    name = BLI_sprintfN("Collection %d", BLI_listbase_count(&collection_parent->children) + 1);
+    name = BLI_sprintfN(DATA_("Collection %d"),
+                        BLI_listbase_count(&collection_parent->children) + 1);
   }
   else {
     const int number = BLI_listbase_count(&collection_parent->children) + 1;
@@ -996,9 +1002,11 @@ static void collection_tag_update_parent_recursive(Main *bmain,
   }
 }
 
-static Collection *collection_parent_editable_find_recursive(Collection *collection)
+static Collection *collection_parent_editable_find_recursive(const ViewLayer *view_layer,
+                                                             Collection *collection)
 {
-  if (!ID_IS_LINKED(collection) && !ID_IS_OVERRIDE_LIBRARY(collection)) {
+  if (!ID_IS_LINKED(collection) && !ID_IS_OVERRIDE_LIBRARY(collection) &&
+      (view_layer == NULL || BKE_view_layer_has_collection(view_layer, collection))) {
     return collection;
   }
 
@@ -1009,10 +1017,16 @@ static Collection *collection_parent_editable_find_recursive(Collection *collect
   LISTBASE_FOREACH (CollectionParent *, collection_parent, &collection->parents) {
     if (!ID_IS_LINKED(collection_parent->collection) &&
         !ID_IS_OVERRIDE_LIBRARY(collection_parent->collection)) {
+      if (view_layer != NULL &&
+          !BKE_view_layer_has_collection(view_layer, collection_parent->collection)) {
+        /* In case this parent collection is not in given view_layer, there is no point in
+         * searching in its ancestors either, we can skip that whole parenting branch. */
+        continue;
+      }
       return collection_parent->collection;
     }
     Collection *editable_collection = collection_parent_editable_find_recursive(
-        collection_parent->collection);
+        view_layer, collection_parent->collection);
     if (editable_collection != NULL) {
       return editable_collection;
     }
@@ -1110,11 +1124,23 @@ bool BKE_collection_object_add_notest(Main *bmain, Collection *collection, Objec
 
 bool BKE_collection_object_add(Main *bmain, Collection *collection, Object *ob)
 {
+  return BKE_collection_viewlayer_object_add(bmain, NULL, collection, ob);
+}
+
+bool BKE_collection_viewlayer_object_add(Main *bmain,
+                                         const ViewLayer *view_layer,
+                                         Collection *collection,
+                                         Object *ob)
+{
   if (collection == NULL) {
     return false;
   }
 
-  collection = collection_parent_editable_find_recursive(collection);
+  collection = collection_parent_editable_find_recursive(view_layer, collection);
+
+  if (collection == NULL) {
+    return false;
+  }
 
   return BKE_collection_object_add_notest(bmain, collection, ob);
 }
@@ -1172,14 +1198,21 @@ static bool scene_collections_object_remove(
 {
   bool removed = false;
 
+  /* If given object is removed from all collections in given scene, then it can also be safely
+   * removed from rigidbody world for given scene. */
   if (collection_skip == NULL) {
     BKE_scene_remove_rigidbody_object(bmain, scene, ob, free_us);
   }
 
   FOREACH_SCENE_COLLECTION_BEGIN (scene, collection) {
-    if (collection != collection_skip) {
-      removed |= collection_object_remove(bmain, collection, ob, free_us);
+    if (ID_IS_LINKED(collection) || ID_IS_OVERRIDE_LIBRARY(collection)) {
+      continue;
     }
+    if (collection == collection_skip) {
+      continue;
+    }
+
+    removed |= collection_object_remove(bmain, collection, ob, free_us);
   }
   FOREACH_SCENE_COLLECTION_END;
 

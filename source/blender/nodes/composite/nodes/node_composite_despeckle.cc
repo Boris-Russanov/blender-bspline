@@ -8,6 +8,11 @@
 #include "UI_interface.h"
 #include "UI_resources.h"
 
+#include "GPU_shader.h"
+
+#include "COM_node_operation.hh"
+#include "COM_utilities.hh"
+
 #include "node_composite_util.hh"
 
 /* **************** FILTER  ******************** */
@@ -36,6 +41,61 @@ static void node_composit_buts_despeckle(uiLayout *layout, bContext *UNUSED(C), 
   uiItemR(col, ptr, "threshold_neighbor", UI_ITEM_R_SPLIT_EMPTY_NAME, nullptr, ICON_NONE);
 }
 
+using namespace blender::realtime_compositor;
+
+class DespeckleOperation : public NodeOperation {
+ public:
+  using NodeOperation::NodeOperation;
+
+  void execute() override
+  {
+    const Result &input_image = get_input("Image");
+    /* Single value inputs can't be despeckled and are returned as is. */
+    if (input_image.is_single_value()) {
+      get_input("Image").pass_through(get_result("Image"));
+      return;
+    }
+
+    GPUShader *shader = shader_manager().get("compositor_despeckle");
+    GPU_shader_bind(shader);
+
+    GPU_shader_uniform_1f(shader, "threshold", get_threshold());
+    GPU_shader_uniform_1f(shader, "neighbor_threshold", get_neighbor_threshold());
+
+    input_image.bind_as_texture(shader, "input_tx");
+
+    const Result &factor_image = get_input("Fac");
+    factor_image.bind_as_texture(shader, "factor_tx");
+
+    const Domain domain = compute_domain();
+    Result &output_image = get_result("Image");
+    output_image.allocate_texture(domain);
+    output_image.bind_as_image(shader, "output_img");
+
+    compute_dispatch_threads_at_least(shader, domain.size);
+
+    GPU_shader_unbind();
+    output_image.unbind_as_image();
+    input_image.unbind_as_texture();
+    factor_image.unbind_as_texture();
+  }
+
+  float get_threshold()
+  {
+    return bnode().custom3;
+  }
+
+  float get_neighbor_threshold()
+  {
+    return bnode().custom4;
+  }
+};
+
+static NodeOperation *get_compositor_operation(Context &context, DNode node)
+{
+  return new DespeckleOperation(context, node);
+}
+
 }  // namespace blender::nodes::node_composite_despeckle_cc
 
 void register_node_type_cmp_despeckle()
@@ -49,6 +109,7 @@ void register_node_type_cmp_despeckle()
   ntype.draw_buttons = file_ns::node_composit_buts_despeckle;
   ntype.flag |= NODE_PREVIEW;
   node_type_init(&ntype, file_ns::node_composit_init_despeckle);
+  ntype.get_compositor_operation = file_ns::get_compositor_operation;
 
   nodeRegisterType(&ntype);
 }

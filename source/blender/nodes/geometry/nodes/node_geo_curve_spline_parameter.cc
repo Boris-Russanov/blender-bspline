@@ -75,7 +75,7 @@ static Array<float> curve_length_point_domain(const bke::CurvesGeometry &curves)
         case CURVE_TYPE_CATMULL_ROM: {
           const int resolution = resolutions[i_curve];
           for (const int i : IndexRange(points.size()).drop_back(1)) {
-            lengths[i + 1] = evaluated_lengths[resolution * i - 1];
+            lengths[i + 1] = evaluated_lengths[resolution * (i + 1) - 1];
           }
           break;
         }
@@ -107,7 +107,7 @@ static Array<float> curve_length_point_domain(const bke::CurvesGeometry &curves)
 
 static VArray<float> construct_curve_parameter_varray(const bke::CurvesGeometry &curves,
                                                       const IndexMask UNUSED(mask),
-                                                      const AttributeDomain domain)
+                                                      const eAttrDomain domain)
 {
   VArray<bool> cyclic = curves.cyclic();
 
@@ -119,10 +119,20 @@ static VArray<float> construct_curve_parameter_varray(const bke::CurvesGeometry 
       for (const int i_curve : range) {
         const float total_length = curves.evaluated_length_total_for_curve(i_curve,
                                                                            cyclic[i_curve]);
-        const float factor = total_length == 0.0f ? 0.0f : 1.0f / total_length;
         MutableSpan<float> curve_lengths = lengths.slice(curves.points_for_curve(i_curve));
-        for (float &value : curve_lengths) {
-          value *= factor;
+        if (total_length > 0.0f) {
+          const float factor = 1.0f / total_length;
+          for (float &value : curve_lengths) {
+            value *= factor;
+          }
+        }
+        else {
+          /* It is arbitrary what to do in those rare cases when all the points are
+           * in the same position. In this case we are just arbitrarily giving a valid
+           * value in the range based on the point index. */
+          for (const int i : curve_lengths.index_range()) {
+            curve_lengths[i] = i / (curve_lengths.size() - 1.0f);
+          }
         }
       }
     });
@@ -135,9 +145,19 @@ static VArray<float> construct_curve_parameter_varray(const bke::CurvesGeometry 
     const int last_index = curves.curves_num() - 1;
     const int total_length = lengths.last() + curves.evaluated_length_total_for_curve(
                                                   last_index, cyclic[last_index]);
-    const float factor = total_length == 0.0f ? 0.0f : 1.0f / total_length;
-    for (float &value : lengths) {
-      value *= factor;
+    if (total_length > 0.0f) {
+      const float factor = 1.0f / total_length;
+      for (float &value : lengths) {
+        value *= factor;
+      }
+    }
+    else {
+      /* It is arbitrary what to do in those rare cases when all the points are
+       * in the same position. In this case we are just arbitrarily giving a valid
+       * value in the range based on the curve index. */
+      for (const int i : lengths.index_range()) {
+        lengths[i] = i / (lengths.size() - 1.0f);
+      }
     }
     return VArray<float>::ForContainer(std::move(lengths));
   }
@@ -146,7 +166,7 @@ static VArray<float> construct_curve_parameter_varray(const bke::CurvesGeometry 
 
 static VArray<float> construct_curve_length_parameter_varray(const bke::CurvesGeometry &curves,
                                                              const IndexMask UNUSED(mask),
-                                                             const AttributeDomain domain)
+                                                             const eAttrDomain domain)
 {
   curves.ensure_evaluated_lengths();
 
@@ -165,7 +185,7 @@ static VArray<float> construct_curve_length_parameter_varray(const bke::CurvesGe
 
 static VArray<int> construct_index_on_spline_varray(const bke::CurvesGeometry &curves,
                                                     const IndexMask UNUSED(mask),
-                                                    const AttributeDomain domain)
+                                                    const eAttrDomain domain)
 {
   if (domain == ATTR_DOMAIN_POINT) {
     Array<int> result(curves.points_num());
@@ -191,7 +211,7 @@ class CurveParameterFieldInput final : public GeometryFieldInput {
   }
 
   GVArray get_varray_for_context(const GeometryComponent &component,
-                                 const AttributeDomain domain,
+                                 const eAttrDomain domain,
                                  IndexMask mask) const final
   {
     if (component.type() == GEO_COMPONENT_TYPE_CURVE) {
@@ -225,7 +245,7 @@ class CurveLengthParameterFieldInput final : public GeometryFieldInput {
   }
 
   GVArray get_varray_for_context(const GeometryComponent &component,
-                                 const AttributeDomain domain,
+                                 const eAttrDomain domain,
                                  IndexMask mask) const final
   {
     if (component.type() == GEO_COMPONENT_TYPE_CURVE) {
@@ -259,7 +279,7 @@ class IndexOnSplineFieldInput final : public GeometryFieldInput {
   }
 
   GVArray get_varray_for_context(const GeometryComponent &component,
-                                 const AttributeDomain domain,
+                                 const eAttrDomain domain,
                                  IndexMask mask) const final
   {
     if (component.type() == GEO_COMPONENT_TYPE_CURVE) {

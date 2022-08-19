@@ -926,7 +926,7 @@ bool BKE_mesh_validate_arrays(Mesh *mesh,
 }
 
 static bool mesh_validate_customdata(CustomData *data,
-                                     CustomDataMask mask,
+                                     eCustomDataMask mask,
                                      const uint totitems,
                                      const bool do_verbose,
                                      const bool do_fixes,
@@ -953,7 +953,7 @@ static bool mesh_validate_customdata(CustomData *data,
     }
 
     if (mask != 0) {
-      CustomDataMask layer_typemask = CD_TYPE_AS_MASK(layer->type);
+      eCustomDataMask layer_typemask = CD_TYPE_AS_MASK(layer->type);
       if ((layer_typemask & mask) == 0) {
         PRINT_ERR("\tCustomDataLayer type %d which isn't in the mask\n", layer->type);
         ok = false;
@@ -1001,10 +1001,6 @@ bool BKE_mesh_validate_all_customdata(CustomData *vdata,
   CustomData_MeshMasks mask = {0};
   if (check_meshmask) {
     mask = CD_MASK_MESH;
-    /* Normal data isn't in the mask since it is derived data,
-     * but it is valid and should not be removed. */
-    mask.vmask |= CD_MASK_NORMAL;
-    mask.pmask |= CD_MASK_NORMAL;
   }
 
   is_valid &= mesh_validate_customdata(

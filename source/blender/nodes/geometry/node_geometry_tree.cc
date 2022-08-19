@@ -109,8 +109,9 @@ void register_node_tree_type_geo()
       MEM_callocN(sizeof(bNodeTreeType), "geometry node tree type"));
   tt->type = NTREE_GEOMETRY;
   strcpy(tt->idname, "GeometryNodeTree");
+  strcpy(tt->group_idname, "GeometryNodeGroup");
   strcpy(tt->ui_name, N_("Geometry Node Editor"));
-  tt->ui_icon = ICON_NODETREE;
+  tt->ui_icon = ICON_GEOMETRY_NODES;
   strcpy(tt->ui_description, N_("Geometry nodes"));
   tt->rna_ext.srna = &RNA_GeometryNodeTree;
   tt->update = geometry_node_tree_update;

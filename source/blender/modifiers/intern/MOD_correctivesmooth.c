@@ -729,8 +729,7 @@ static void deformVerts(ModifierData *md,
                         float (*vertexCos)[3],
                         int verts_num)
 {
-  Mesh *mesh_src = MOD_deform_mesh_eval_get(
-      ctx->object, NULL, mesh, NULL, verts_num, false, false);
+  Mesh *mesh_src = MOD_deform_mesh_eval_get(ctx->object, NULL, mesh, NULL, verts_num, false);
 
   correctivesmooth_modifier_do(
       md, ctx->depsgraph, ctx->object, mesh_src, vertexCos, (uint)verts_num, NULL);
@@ -747,10 +746,9 @@ static void deformVertsEM(ModifierData *md,
                           float (*vertexCos)[3],
                           int verts_num)
 {
-  Mesh *mesh_src = MOD_deform_mesh_eval_get(
-      ctx->object, editData, mesh, NULL, verts_num, false, false);
+  Mesh *mesh_src = MOD_deform_mesh_eval_get(ctx->object, editData, mesh, NULL, verts_num, false);
 
-  /* TODO(Campbell): use edit-mode data only (remove this line). */
+  /* TODO(@campbellbarton): use edit-mode data only (remove this line). */
   if (mesh_src != NULL) {
     BKE_mesh_wrapper_ensure_mdata(mesh_src);
   }
@@ -798,12 +796,26 @@ static void panelRegister(ARegionType *region_type)
   modifier_panel_register(region_type, eModifierType_CorrectiveSmooth, panel_draw);
 }
 
-static void blendWrite(BlendWriter *writer, const ModifierData *md)
+static void blendWrite(BlendWriter *writer, const ID *id_owner, const ModifierData *md)
 {
-  const CorrectiveSmoothModifierData *csmd = (const CorrectiveSmoothModifierData *)md;
+  CorrectiveSmoothModifierData csmd = *(const CorrectiveSmoothModifierData *)md;
+  const bool is_undo = BLO_write_is_undo(writer);
 
-  if (csmd->bind_coords) {
-    BLO_write_float3_array(writer, csmd->bind_coords_num, (float *)csmd->bind_coords);
+  if (ID_IS_OVERRIDE_LIBRARY(id_owner) && !is_undo) {
+    BLI_assert(!ID_IS_LINKED(id_owner));
+    const bool is_local = (md->flag & eModifierFlag_OverrideLibrary_Local) != 0;
+    if (!is_local) {
+      /* Modifier coming from linked data cannot be bound from an override, so we can remove all
+       * binding data, can save a significant amount of memory. */
+      csmd.bind_coords_num = 0;
+      csmd.bind_coords = NULL;
+    }
+  }
+
+  BLO_write_struct_at_address(writer, CorrectiveSmoothModifierData, md, &csmd);
+
+  if (csmd.bind_coords != NULL) {
+    BLO_write_float3_array(writer, csmd.bind_coords_num, (float *)csmd.bind_coords);
   }
 }
 
@@ -821,7 +833,7 @@ static void blendRead(BlendDataReader *reader, ModifierData *md)
 }
 
 ModifierTypeInfo modifierType_CorrectiveSmooth = {
-    /* name */ "CorrectiveSmooth",
+    /* name */ N_("CorrectiveSmooth"),
     /* structName */ "CorrectiveSmoothModifierData",
     /* structSize */ sizeof(CorrectiveSmoothModifierData),
     /* srna */ &RNA_CorrectiveSmoothModifier,

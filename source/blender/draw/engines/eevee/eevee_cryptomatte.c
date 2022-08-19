@@ -25,7 +25,6 @@
  * they take into account to create the render passes. When accurate mode is off the number of
  * levels is used as the number of cryptomatte samples to take. When accuracy mode is on the number
  * of render samples is used.
- *
  */
 
 #include "DRW_engine.h"
@@ -94,7 +93,7 @@ BLI_INLINE int eevee_cryptomatte_pixel_stride(const ViewLayer *view_layer)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Init Renderpasses
+/** \name Init Render-Passes
  * \{ */
 
 void EEVEE_cryptomatte_renderpasses_init(EEVEE_Data *vedata)
@@ -189,11 +188,8 @@ void EEVEE_cryptomatte_cache_init(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Dat
   }
 }
 
-static DRWShadingGroup *eevee_cryptomatte_shading_group_create(EEVEE_Data *vedata,
-                                                               EEVEE_ViewLayerData *UNUSED(sldata),
-                                                               Object *ob,
-                                                               Material *material,
-                                                               bool is_hair)
+static DRWShadingGroup *eevee_cryptomatte_shading_group_create(
+    EEVEE_Data *vedata, EEVEE_ViewLayerData *sldata, Object *ob, Material *material, bool is_hair)
 {
   const DRWContextState *draw_ctx = DRW_context_state_get();
   const ViewLayer *view_layer = draw_ctx->view_layer;
@@ -229,6 +225,7 @@ static DRWShadingGroup *eevee_cryptomatte_shading_group_create(EEVEE_Data *vedat
   DRWShadingGroup *grp = DRW_shgroup_create(EEVEE_shaders_cryptomatte_sh_get(is_hair),
                                             psl->cryptomatte_ps);
   DRW_shgroup_uniform_vec4_copy(grp, "cryptohash", cryptohash);
+  DRW_shgroup_uniform_block(grp, "shadow_block", sldata->shadow_ubo);
 
   return grp;
 }
@@ -251,7 +248,9 @@ void EEVEE_cryptomatte_object_curves_cache_populate(EEVEE_Data *vedata,
 {
   BLI_assert(ob->type == OB_CURVES);
   Material *material = BKE_object_material_get_eval(ob, CURVES_MATERIAL_NR);
-  eevee_cryptomatte_curves_cache_populate(vedata, sldata, ob, NULL, NULL, material);
+  DRWShadingGroup *grp = eevee_cryptomatte_shading_group_create(
+      vedata, sldata, ob, material, true);
+  DRW_shgroup_curves_create_sub(ob, grp, NULL);
 }
 
 void EEVEE_cryptomatte_particle_hair_cache_populate(EEVEE_Data *vedata,

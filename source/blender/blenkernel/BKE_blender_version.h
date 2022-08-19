@@ -17,7 +17,7 @@ extern "C" {
  */
 
 /* Blender major and minor version. */
-#define BLENDER_VERSION 303
+#define BLENDER_VERSION 304
 /* Blender patch version for bugfix releases. */
 #define BLENDER_VERSION_PATCH 0
 /** Blender release cycle stage: alpha/beta/rc/release. */

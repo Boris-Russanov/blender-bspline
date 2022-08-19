@@ -17,7 +17,7 @@ static void node_declare(NodeDeclarationBuilder &b)
  */
 
 static VArray<int> construct_curve_point_count_gvarray(const CurveComponent &component,
-                                                       const AttributeDomain domain)
+                                                       const eAttrDomain domain)
 {
   if (!component.has_curves()) {
     return {};
@@ -32,7 +32,7 @@ static VArray<int> construct_curve_point_count_gvarray(const CurveComponent &com
   }
   if (domain == ATTR_DOMAIN_POINT) {
     VArray<int> count = VArray<int>::ForFunc(curves.curves_num(), count_fn);
-    return component.attribute_try_adapt_domain<int>(
+    return component.attributes()->adapt_domain<int>(
         std::move(count), ATTR_DOMAIN_CURVE, ATTR_DOMAIN_POINT);
   }
 
@@ -47,7 +47,7 @@ class SplineCountFieldInput final : public GeometryFieldInput {
   }
 
   GVArray get_varray_for_context(const GeometryComponent &component,
-                                 const AttributeDomain domain,
+                                 const eAttrDomain domain,
                                  IndexMask UNUSED(mask)) const final
   {
     if (component.type() == GEO_COMPONENT_TYPE_CURVE) {

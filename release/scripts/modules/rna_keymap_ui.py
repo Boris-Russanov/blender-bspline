@@ -1,7 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-# <pep8 compliant>
-
 __all__ = (
     "draw_entry",
     "draw_km",
@@ -13,8 +11,10 @@ __all__ = (
 
 
 import bpy
-from bpy.app.translations import pgettext_iface as iface_
-from bpy.app.translations import contexts as i18n_contexts
+from bpy.app.translations import (
+    contexts as i18n_contexts,
+    pgettext_iface as iface_,
+)
 
 
 def _indented_layout(layout, level):
