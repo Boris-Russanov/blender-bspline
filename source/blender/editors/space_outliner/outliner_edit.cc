@@ -29,6 +29,7 @@
 #include "BKE_blender_copybuffer.h"
 #include "BKE_context.h"
 #include "BKE_idtype.h"
+#include "BKE_layer.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_override.h"
 #include "BKE_lib_query.h"
@@ -64,6 +65,8 @@
 #include "tree/tree_iterator.hh"
 
 using namespace blender::ed::outliner;
+
+namespace blender::ed::outliner {
 
 static void outliner_show_active(SpaceOutliner *space_outliner,
                                  ARegion *region,
@@ -144,14 +147,10 @@ void OUTLINER_OT_highlight_update(wmOperatorType *ot)
 /** \name Toggle Open/Closed Operator
  * \{ */
 
-void outliner_item_openclose(SpaceOutliner *space_outliner,
-                             TreeElement *te,
-                             bool open,
-                             bool toggle_all)
+void outliner_item_openclose(TreeElement *te, bool open, bool toggle_all)
 {
-  /* Prevent opening leaf elements in the tree unless in the Data API display mode because in that
-   * mode subtrees are empty unless expanded. */
-  if (space_outliner->outlinevis != SO_DATA_API && BLI_listbase_is_empty(&te->subtree)) {
+  /* Only allow opening elements with children. */
+  if (!(te->flag & TE_PRETEND_HAS_CHILDREN) && BLI_listbase_is_empty(&te->subtree)) {
     return;
   }
 
@@ -198,7 +197,7 @@ static int outliner_item_openclose_modal(bContext *C, wmOperator *op, const wmEv
 
       /* Only toggle openclose on the same level as the first clicked element */
       if (te->xs == data->x_location) {
-        outliner_item_openclose(space_outliner, te, data->open, false);
+        outliner_item_openclose(te, data->open, false);
 
         outliner_tag_redraw_avoid_rebuild_on_open_change(space_outliner, region);
       }
@@ -242,7 +241,7 @@ static int outliner_item_openclose_invoke(bContext *C, wmOperator *op, const wmE
     const bool open = (tselem->flag & TSE_CLOSED) ||
                       (toggle_all && (outliner_flag_is_any_test(&te->subtree, TSE_CLOSED, 1)));
 
-    outliner_item_openclose(space_outliner, te, open, toggle_all);
+    outliner_item_openclose(te, open, toggle_all);
     outliner_tag_redraw_avoid_rebuild_on_open_change(space_outliner, region);
 
     /* Only toggle once for single click toggling */
@@ -1263,11 +1262,13 @@ static int outliner_open_back(TreeElement *te)
 /* Return element representing the active base or bone in the outliner, or NULL if none exists */
 static TreeElement *outliner_show_active_get_element(bContext *C,
                                                      SpaceOutliner *space_outliner,
+                                                     const Scene *scene,
                                                      ViewLayer *view_layer)
 {
   TreeElement *te;
 
-  Object *obact = OBACT(view_layer);
+  BKE_view_layer_synced_ensure(scene, view_layer);
+  Object *obact = BKE_view_layer_active_object_get(view_layer);
 
   if (!obact) {
     return nullptr;
@@ -1318,11 +1319,13 @@ static void outliner_show_active(SpaceOutliner *space_outliner,
 static int outliner_show_active_exec(bContext *C, wmOperator *UNUSED(op))
 {
   SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
+  const Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   ARegion *region = CTX_wm_region(C);
   View2D *v2d = &region->v2d;
 
-  TreeElement *active_element = outliner_show_active_get_element(C, space_outliner, view_layer);
+  TreeElement *active_element = outliner_show_active_get_element(
+      C, space_outliner, scene, view_layer);
 
   if (active_element) {
     ID *id = TREESTORE(active_element)->id;
@@ -2234,3 +2237,5 @@ void OUTLINER_OT_orphans_purge(wmOperatorType *ot)
 }
 
 /** \} */
+
+}  // namespace blender::ed::outliner

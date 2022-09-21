@@ -304,6 +304,10 @@ typedef enum eScenePassType {
 #define RE_PASSNAME_BLOOM "BloomCol"
 #define RE_PASSNAME_VOLUME_LIGHT "VolumeDir"
 
+#define RE_PASSNAME_CRYPTOMATTE_OBJECT "CryptoObject"
+#define RE_PASSNAME_CRYPTOMATTE_ASSET "CryptoAsset"
+#define RE_PASSNAME_CRYPTOMATTE_MATERIAL "CryptoMaterial"
+
 /** View - MultiView. */
 typedef struct SceneRenderView {
   struct SceneRenderView *next, *prev;
@@ -397,12 +401,12 @@ typedef struct ImageFormatData {
 
   /** R_IMF_PLANES_BW, R_IMF_PLANES_RGB, R_IMF_PLANES_RGBA. */
   char planes;
-  /** Generic options for all image types, alpha zbuffer. */
+  /** Generic options for all image types, alpha Z-buffer. */
   char flag;
 
-  /** (0 - 100), eg: jpeg quality. */
+  /** (0 - 100), eg: JPEG quality. */
   char quality;
-  /** (0 - 100), eg: png compression. */
+  /** (0 - 100), eg: PNG compression. */
   char compress;
 
   /* --- format specific --- */
@@ -1496,12 +1500,12 @@ typedef struct ToolSettings {
   /* Transform */
   char transform_pivot_point;
   char transform_flag;
-  /** Snap elements (per spacetype), #eSnapMode. */
+  /** Snap elements (per space-type), #eSnapMode. */
   char _pad1[1];
   short snap_mode;
   char snap_node_mode;
   char snap_uv_mode;
-  /** Generic flags (per spacetype), #eSnapFlag. */
+  /** Generic flags (per space-type), #eSnapFlag. */
   short snap_flag;
   short snap_flag_node;
   short snap_flag_seq;
@@ -2038,18 +2042,10 @@ extern const char *RE_engine_id_CYCLES;
   (BASE_EDITABLE(v3d, base) && (((base)->flag & BASE_SELECTED) != 0))
 
 /* deprecate this! */
-#define FIRSTBASE(_view_layer) ((struct Base *)(_view_layer)->object_bases.first)
-#define LASTBASE(_view_layer) ((struct Base *)(_view_layer)->object_bases.last)
-#define BASACT(_view_layer) ((_view_layer)->basact)
-#define OBACT(_view_layer) (BASACT(_view_layer) ? BASACT(_view_layer)->object : NULL)
-
-#define OBEDIT_FROM_WORKSPACE(workspace, _view_layer) \
-  (((workspace)->object_mode & OD_MODE_EDIT) ? OBACT(_view_layer) : NULL)
 #define OBEDIT_FROM_OBACT(ob) ((ob) ? (((ob)->mode & OB_MODE_EDIT) ? ob : NULL) : NULL)
 #define OBPOSE_FROM_OBACT(ob) ((ob) ? (((ob)->mode & OB_MODE_POSE) ? ob : NULL) : NULL)
 #define OBWEIGHTPAINT_FROM_OBACT(ob) \
   ((ob) ? (((ob)->mode & OB_MODE_WEIGHT_PAINT) ? ob : NULL) : NULL)
-#define OBEDIT_FROM_VIEW_LAYER(view_layer) OBEDIT_FROM_OBACT(OBACT(view_layer))
 
 #define V3D_CAMERA_LOCAL(v3d) ((!(v3d)->scenelock && (v3d)->camera) ? (v3d)->camera : NULL)
 #define V3D_CAMERA_SCENE(scene, v3d) \

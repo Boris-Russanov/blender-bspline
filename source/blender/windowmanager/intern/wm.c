@@ -275,7 +275,7 @@ IDTypeInfo IDType_ID_WM = {
     .foreach_id = window_manager_foreach_id,
     .foreach_cache = NULL,
     .foreach_path = NULL,
-    .owner_get = NULL,
+    .owner_pointer_get = NULL,
 
     .blend_write = window_manager_blend_write,
     .blend_read_data = window_manager_blend_read_data,
@@ -616,7 +616,10 @@ void wm_close_and_free_all(bContext *C, ListBase *wmlist)
   while ((wm = wmlist->first)) {
     wm_close_and_free(C, wm);
     BLI_remlink(wmlist, wm);
-    BKE_libblock_free_data(&wm->id, true);
+    /* Don't handle user counts as this is only ever called once #G_MAIN has already been freed via
+     * #BKE_main_free so any ID's referenced by the window-manager (from ID properties) will crash.
+     * See: T100703. */
+    BKE_libblock_free_data(&wm->id, false);
     BKE_libblock_free_data_py(&wm->id);
     MEM_freeN(wm);
   }

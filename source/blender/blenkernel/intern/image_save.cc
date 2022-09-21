@@ -13,6 +13,8 @@
 #include "BLI_string.h"
 #include "BLI_vector.hh"
 
+#include "BLT_translation.h"
+
 #include "DNA_image_types.h"
 
 #include "MEM_guardedalloc.h"
@@ -173,12 +175,12 @@ bool BKE_image_save_options_init(ImageSaveOptions *opts,
           BLI_strncpy(opts->filepath, G.ima, sizeof(opts->filepath));
         }
         else {
-          BLI_strncpy(opts->filepath, "//untitled", sizeof(opts->filepath));
+          BLI_path_join(opts->filepath, sizeof(opts->filepath), "//", DATA_("untitled"), nullptr);
           BLI_path_abs(opts->filepath, BKE_main_blendfile_path(bmain));
         }
       }
       else {
-        BLI_snprintf(opts->filepath, sizeof(opts->filepath), "//%s", ima->id.name + 2);
+        BLI_path_join(opts->filepath, sizeof(opts->filepath), "//", ima->id.name + 2, nullptr);
         BLI_path_make_safe(opts->filepath);
         BLI_path_abs(opts->filepath, is_prev_save ? G.ima : BKE_main_blendfile_path(bmain));
       }

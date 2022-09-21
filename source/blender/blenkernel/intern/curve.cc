@@ -321,7 +321,7 @@ IDTypeInfo IDType_ID_CU_LEGACY = {
     /* foreach_id */ curve_foreach_id,
     /* foreach_cache */ nullptr,
     /* foreach_path */ nullptr,
-    /* owner_get */ nullptr,
+    /* owner_pointer_get */ nullptr,
 
     /* blend_write */ curve_blend_write,
     /* blend_read_data */ curve_blend_read_data,
@@ -2247,7 +2247,7 @@ static void minimum_twist_between_two_points(BevPoint *current_point, BevPoint *
 
 static void make_bevel_list_3D_minimum_twist(BevList *bl)
 {
-  BevPoint *bevp2, *bevp1, *bevp0; /* standard for all make_bevel_list_3D_* funcs */
+  BevPoint *bevp2, *bevp1, *bevp0; /* Standard for all make_bevel_list_3D_* functions. */
   int nr;
   float q[4];
 
@@ -2358,7 +2358,7 @@ static void make_bevel_list_3D_minimum_twist(BevList *bl)
 
 static void make_bevel_list_3D_tangent(BevList *bl)
 {
-  BevPoint *bevp2, *bevp1, *bevp0; /* standard for all make_bevel_list_3D_* funcs */
+  BevPoint *bevp2, *bevp1, *bevp0; /* Standard for all make_bevel_list_3D_* functions. */
   int nr;
 
   float bevp0_tan[3];

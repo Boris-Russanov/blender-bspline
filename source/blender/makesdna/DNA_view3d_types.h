@@ -296,7 +296,9 @@ typedef struct View3D {
   char _pad6[2];
   int layact DNA_DEPRECATED;
   unsigned short local_collections_uuid;
-  short _pad7[3];
+  short _pad7[2];
+
+  short debug_flag;
 
   /** Optional bool for 3d cursor to define center. */
   short ob_center_cursor;
@@ -389,7 +391,7 @@ enum {
 #define RV3D_PAINTING (1 << 5)
 /*#define RV3D_IS_GAME_ENGINE       (1 << 5) */ /* UNUSED */
 /**
- * Disable zbuffer offset, skip calls to #ED_view3d_polygon_offset.
+ * Disable Z-buffer offset, skip calls to #ED_view3d_polygon_offset.
  * Use when precise surface depth is needed and picking bias isn't, see T45434).
  */
 #define RV3D_ZOFFSET_DISABLED 64
@@ -487,6 +489,11 @@ enum {
   V3D_SHADING_SCENE_WORLD_RENDER = (1 << 13),
   V3D_SHADING_STUDIOLIGHT_VIEW_ROTATION = (1 << 14),
   V3D_SHADING_COMPOSITOR = (1 << 15),
+};
+
+/** #View3D.debug_flag */
+enum {
+  V3D_DEBUG_FREEZE_CULLING = (1 << 0),
 };
 
 #define V3D_USES_SCENE_LIGHTS(v3d) \

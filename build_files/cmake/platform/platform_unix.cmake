@@ -16,9 +16,16 @@ if(NOT DEFINED LIBDIR)
   # Choose the best suitable libraries.
   if(EXISTS ${LIBDIR_NATIVE_ABI})
     set(LIBDIR ${LIBDIR_NATIVE_ABI})
+    set(WITH_LIBC_MALLOC_HOOK_WORKAROUND True)
   elseif(EXISTS ${LIBDIR_CENTOS7_ABI})
     set(LIBDIR ${LIBDIR_CENTOS7_ABI})
     set(WITH_CXX11_ABI OFF)
+    if(WITH_MEM_JEMALLOC)
+      # jemalloc provides malloc hooks.
+      set(WITH_LIBC_MALLOC_HOOK_WORKAROUND False)
+    else()
+      set(WITH_LIBC_MALLOC_HOOK_WORKAROUND True)
+    endif()
 
     if(CMAKE_COMPILER_IS_GNUCC AND
        CMAKE_C_COMPILER_VERSION VERSION_LESS 9.3)
@@ -81,6 +88,15 @@ macro(find_package_wrapper)
   endif()
 endmacro()
 
+# Utility to install precompiled shared libraries.
+macro(add_bundled_libraries library)
+  if(EXISTS ${LIBDIR})
+    file(GLOB _all_library_versions ${LIBDIR}/${library}/lib/*\.so*)
+    list(APPEND PLATFORM_BUNDLED_LIBRARIES ${_all_library_versions})
+    unset(_all_library_versions)
+ endif()
+endmacro()
+
 # ----------------------------------------------------------------------------
 # Precompiled Libraries
 #
@@ -127,14 +143,38 @@ if(NOT WITH_SYSTEM_FREETYPE)
 endif()
 
 if(WITH_PYTHON)
-  # No way to set py35, remove for now.
-  # find_package(PythonLibs)
+  # This could be used, see: D14954 for details.
+  # `find_package(PythonLibs)`
 
-  # Use our own instead, since without py is such a rare case,
-  # require this package
-  # XXX Linking errors with debian static python :/
-#       find_package_wrapper(PythonLibsUnix REQUIRED)
+  # Use our own instead, since without Python is such a rare case,
+  # require this package.
+  # XXX: Linking errors with Debian static Python (sigh).
+  # find_package_wrapper(PythonLibsUnix REQUIRED)
   find_package(PythonLibsUnix REQUIRED)
+
+  if(WITH_PYTHON_MODULE AND NOT WITH_INSTALL_PORTABLE)
+    # Installing into `site-packages`, warn when installing into `./../lib/`
+    # which script authors almost certainly don't want.
+    if(EXISTS ${LIBDIR})
+      cmake_path(IS_PREFIX LIBDIR "${PYTHON_SITE_PACKAGES}" NORMALIZE _is_prefix)
+      if(_is_prefix)
+        message(WARNING "
+Building Blender with the following configuration:
+  - WITH_PYTHON_MODULE=ON
+  - WITH_INSTALL_PORTABLE=OFF
+  - LIBDIR=\"${LIBDIR}\"
+  - PYTHON_SITE_PACKAGES=\"${PYTHON_SITE_PACKAGES}\"
+In this case you may want to either:
+  - Use the system Python's site-packages, see:
+    python -c \"import site; print(site.getsitepackages()[0])\"
+  - Set WITH_INSTALL_PORTABLE=ON to create a stand-alone \"bpy\" module
+    which you will need to ensure is in Python's module search path.
+Proceeding with PYTHON_SITE_PACKAGES install target, you have been warned!"
+        )
+      endif()
+      unset(_is_prefix)
+    endif()
+  endif()
 endif()
 
 if(WITH_IMAGE_OPENEXR)
@@ -644,46 +684,125 @@ endif()
 
 if(WITH_GHOST_WAYLAND)
   find_package(PkgConfig)
-  pkg_check_modules(wayland-client REQUIRED wayland-client>=1.12)
-  pkg_check_modules(wayland-egl REQUIRED wayland-egl)
-  pkg_check_modules(wayland-scanner REQUIRED wayland-scanner)
-  pkg_check_modules(xkbcommon REQUIRED xkbcommon)
-  pkg_check_modules(wayland-cursor REQUIRED wayland-cursor)
+  pkg_check_modules(wayland-client wayland-client>=1.12)
+  pkg_check_modules(wayland-egl wayland-egl)
+  pkg_check_modules(wayland-scanner wayland-scanner)
+  pkg_check_modules(xkbcommon xkbcommon)
+  pkg_check_modules(wayland-cursor wayland-cursor)
+  pkg_check_modules(wayland-protocols wayland-protocols>=1.15)
 
-  if(WITH_GHOST_WAYLAND_DBUS)
-    pkg_check_modules(dbus REQUIRED dbus-1)
-  endif()
-
-  if(WITH_GHOST_WAYLAND_LIBDECOR)
-    pkg_check_modules(libdecor REQUIRED libdecor-0>=0.1)
-  endif()
-
-  list(APPEND PLATFORM_LINKLIBS
-    ${xkbcommon_LINK_LIBRARIES}
-  )
-
-  if(NOT WITH_GHOST_WAYLAND_DYNLOAD)
-    list(APPEND PLATFORM_LINKLIBS
-      ${wayland-client_LINK_LIBRARIES}
-      ${wayland-egl_LINK_LIBRARIES}
-      ${wayland-cursor_LINK_LIBRARIES}
+  if(${wayland-protocols_FOUND})
+    pkg_get_variable(WAYLAND_PROTOCOLS_DIR wayland-protocols pkgdatadir)
+  else()
+    # CentOS 7 packages have too old a version, a newer version exist in the
+    # precompiled libraries.
+    find_path(WAYLAND_PROTOCOLS_DIR
+      NAMES unstable/xdg-decoration/xdg-decoration-unstable-v1.xml
+      PATH_SUFFIXES share/wayland-protocols
+      PATHS ${LIBDIR}/wayland-protocols
     )
+
+    if(EXISTS ${WAYLAND_PROTOCOLS_DIR})
+      set(wayland-protocols_FOUND ON)
+    endif()
   endif()
 
-  if(WITH_GHOST_WAYLAND_DBUS)
+  if (NOT ${wayland-client_FOUND})
+    message(STATUS "wayland-client not found, disabling WITH_GHOST_WAYLAND")
+    set(WITH_GHOST_WAYLAND OFF)
+  endif()
+  if (NOT ${wayland-egl_FOUND})
+    message(STATUS "wayland-egl not found, disabling WITH_GHOST_WAYLAND")
+    set(WITH_GHOST_WAYLAND OFF)
+  endif()
+  if (NOT ${wayland-scanner_FOUND})
+    message(STATUS "wayland-scanner not found, disabling WITH_GHOST_WAYLAND")
+    set(WITH_GHOST_WAYLAND OFF)
+  endif()
+  if (NOT ${wayland-cursor_FOUND})
+    message(STATUS "wayland-cursor not found, disabling WITH_GHOST_WAYLAND")
+    set(WITH_GHOST_WAYLAND OFF)
+  endif()
+  if (NOT ${wayland-protocols_FOUND})
+    message(STATUS "wayland-protocols not found, disabling WITH_GHOST_WAYLAND")
+    set(WITH_GHOST_WAYLAND OFF)
+  endif()
+  if (NOT ${xkbcommon_FOUND})
+    message(STATUS "xkbcommon not found, disabling WITH_GHOST_WAYLAND")
+    set(WITH_GHOST_WAYLAND OFF)
+  endif()
+
+  if(WITH_GHOST_WAYLAND)
+    if(WITH_GHOST_WAYLAND_DBUS)
+      pkg_check_modules(dbus REQUIRED dbus-1)
+    endif()
+
+    if(WITH_GHOST_WAYLAND_LIBDECOR)
+      pkg_check_modules(libdecor REQUIRED libdecor-0>=0.1)
+    endif()
+
     list(APPEND PLATFORM_LINKLIBS
-      ${dbus_LINK_LIBRARIES}
+      ${xkbcommon_LINK_LIBRARIES}
     )
-    add_definitions(-DWITH_GHOST_WAYLAND_DBUS)
-  endif()
 
-  if(WITH_GHOST_WAYLAND_LIBDECOR)
     if(NOT WITH_GHOST_WAYLAND_DYNLOAD)
       list(APPEND PLATFORM_LINKLIBS
-        ${libdecor_LIBRARIES}
+        ${wayland-client_LINK_LIBRARIES}
+        ${wayland-egl_LINK_LIBRARIES}
+        ${wayland-cursor_LINK_LIBRARIES}
       )
     endif()
-    add_definitions(-DWITH_GHOST_WAYLAND_LIBDECOR)
+
+    if(WITH_GHOST_WAYLAND_DBUS)
+      list(APPEND PLATFORM_LINKLIBS
+        ${dbus_LINK_LIBRARIES}
+      )
+      add_definitions(-DWITH_GHOST_WAYLAND_DBUS)
+    endif()
+
+    if(WITH_GHOST_WAYLAND_LIBDECOR)
+      if(NOT WITH_GHOST_WAYLAND_DYNLOAD)
+        list(APPEND PLATFORM_LINKLIBS
+          ${libdecor_LIBRARIES}
+        )
+      endif()
+      add_definitions(-DWITH_GHOST_WAYLAND_LIBDECOR)
+    endif()
+
+    pkg_get_variable(WAYLAND_SCANNER wayland-scanner wayland_scanner)
+
+    # When using dynamic loading, headers generated
+    # from older versions of `wayland-scanner` aren't compatible.
+    if(WITH_GHOST_WAYLAND_DYNLOAD)
+      execute_process(
+        COMMAND ${WAYLAND_SCANNER} --version
+        # The version is written to the `stderr`.
+        ERROR_VARIABLE _wayland_scanner_out
+        ERROR_STRIP_TRAILING_WHITESPACE
+      )
+      if(NOT "${_wayland_scanner_out}" STREQUAL "")
+        string(
+          REGEX REPLACE
+          "^wayland-scanner[ \t]+([0-9]+)\.([0-9]+).*"
+          "\\1.\\2"
+          _wayland_scanner_ver
+          "${_wayland_scanner_out}"
+        )
+        if("${_wayland_scanner_ver}" VERSION_LESS "1.20")
+          message(
+            FATAL_ERROR
+            "Found ${WAYLAND_SCANNER} version \"${_wayland_scanner_ver}\", "
+            "the minimum version is 1.20!"
+          )
+        endif()
+        unset(_wayland_scanner_ver)
+      else()
+        message(WARNING "Unable to access the version from ${WAYLAND_SCANNER}, continuing.")
+      endif()
+      unset(_wayland_scanner_out)
+    endif()
+    # End wayland-scanner version check.
+
   endif()
 endif()
 
@@ -971,3 +1090,16 @@ function(CONFIGURE_ATOMIC_LIB_IF_NEEDED)
 endfunction()
 
 CONFIGURE_ATOMIC_LIB_IF_NEEDED()
+
+if(PLATFORM_BUNDLED_LIBRARIES)
+  # For the installed Python module and installed Blender executable, we set the
+  # rpath to the relative path where the install step will copy the shared libraries.
+  set(CMAKE_SKIP_INSTALL_RPATH FALSE)
+  list(APPEND CMAKE_INSTALL_RPATH $ORIGIN/lib)
+
+  # For executables that are built but not installed (mainly tests) we set an absolute
+  # rpath to the lib folder. This is needed because these can be in different folders,
+  # and because the build and install folder may be different.
+  set(CMAKE_SKIP_BUILD_RPATH FALSE)
+  list(APPEND CMAKE_BUILD_RPATH $ORIGIN/lib ${CMAKE_INSTALL_PREFIX_WITH_CONFIG}/lib)
+endif()

@@ -543,7 +543,6 @@ static PyObject *Quaternion_rotate(QuaternionObject *self, PyObject *value)
   length = normalize_qt_qt(tquat, self->quat);
   quat_to_mat3(self_rmat, tquat);
   mul_m3_m3m3(rmat, other_rmat, self_rmat);
-
   mat3_to_quat(self->quat, rmat);
   mul_qt_fl(self->quat, length); /* maintain length after rotating */
 
@@ -1663,9 +1662,9 @@ PyDoc_STRVAR(quaternion_doc,
              "\n"
              "   This object gives access to Quaternions in Blender.\n"
              "\n"
-             "   :param seq: size 3 or 4\n"
+             "   :arg seq: size 3 or 4\n"
              "   :type seq: :class:`Vector`\n"
-             "   :param angle: rotation angle, in radians\n"
+             "   :arg angle: rotation angle, in radians\n"
              "   :type angle: float\n"
              "\n"
              "   The constructor takes arguments in various forms:\n"

@@ -21,10 +21,16 @@
 
 namespace blender::nodes::node_composite_bilateralblur_cc {
 
+NODE_STORAGE_FUNCS(NodeBilateralBlurData)
+
 static void cmp_node_bilateralblur_declare(NodeDeclarationBuilder &b)
 {
-  b.add_input<decl::Color>(N_("Image")).default_value({1.0f, 1.0f, 1.0f, 1.0f});
-  b.add_input<decl::Color>(N_("Determinator")).default_value({1.0f, 1.0f, 1.0f, 1.0f});
+  b.add_input<decl::Color>(N_("Image"))
+      .default_value({1.0f, 1.0f, 1.0f, 1.0f})
+      .compositor_domain_priority(0);
+  b.add_input<decl::Color>(N_("Determinator"))
+      .default_value({1.0f, 1.0f, 1.0f, 1.0f})
+      .compositor_domain_priority(1);
   b.add_output<decl::Color>(N_("Image"));
 }
 
@@ -90,18 +96,12 @@ class BilateralBlurOperation : public NodeOperation {
 
   int get_blur_radius()
   {
-    return math::ceil(get_node_bilateral_blur_data().iter +
-                      get_node_bilateral_blur_data().sigma_space);
+    return math::ceil(node_storage(bnode()).iter + node_storage(bnode()).sigma_space);
   }
 
   float get_threshold()
   {
-    return get_node_bilateral_blur_data().sigma_color;
-  }
-
-  NodeBilateralBlurData &get_node_bilateral_blur_data()
-  {
-    return *static_cast<NodeBilateralBlurData *>(bnode().storage);
+    return node_storage(bnode()).sigma_color;
   }
 };
 

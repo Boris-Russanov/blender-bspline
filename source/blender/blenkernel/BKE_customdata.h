@@ -55,14 +55,17 @@ extern const CustomData_MeshMasks CD_MASK_EVERYTHING;
 typedef enum eCDAllocType {
   /** Use the data pointer. */
   CD_ASSIGN = 0,
-  /** Allocate blank memory. */
-  CD_CALLOC = 1,
-  /** Allocate and set to default. */
-  CD_DEFAULT = 2,
+  /** Allocate and set to default, which is usually just zeroed memory. */
+  CD_SET_DEFAULT = 2,
   /** Use data pointers, set layer flag NOFREE. */
   CD_REFERENCE = 3,
   /** Do a full copy of all layers, only allowed if source has same number of elements. */
   CD_DUPLICATE = 4,
+  /**
+   * Default construct new layer values. Does nothing for trivial types. This should be used
+   * if all layer values will be set by the caller after creating the layer.
+   */
+  CD_CONSTRUCT = 5,
 } eCDAllocType;
 
 #define CD_TYPE_AS_MASK(_type) (eCustomDataMask)((eCustomDataMask)1 << (eCustomDataMask)(_type))
@@ -134,7 +137,7 @@ void CustomData_data_add(int type, void *data1, const void *data2);
 
 /**
  * Initializes a CustomData object with the same layer setup as source.
- * mask is a bitfield where `(mask & (1 << (layer type)))` indicates
+ * mask is a bit-field where `(mask & (1 << (layer type)))` indicates
  * if a layer should be copied or not. alloctype must be one of the above.
  */
 void CustomData_copy(const struct CustomData *source,
@@ -175,13 +178,11 @@ bool CustomData_merge_mesh_to_bmesh(const struct CustomData *source,
                                     int totelem);
 
 /**
- * Reallocate custom data to a new element count.
- * Only affects on data layers which are owned by the CustomData itself,
- * referenced data is kept unchanged,
- *
- * \note Take care of referenced layers by yourself!
+ * Reallocate custom data to a new element count. If the new size is larger, the new values use
+ * the #CD_CONSTRUCT behavior, so trivial types must be initialized by the caller. After being
+ * resized, the #CustomData does not contain any referenced layers.
  */
-void CustomData_realloc(struct CustomData *data, int totelem);
+void CustomData_realloc(struct CustomData *data, int old_size, int new_size);
 
 /**
  * BMesh version of CustomData_merge; merges the layouts of source and `dest`,
@@ -417,7 +418,7 @@ void *CustomData_bmesh_get_n(const struct CustomData *data, void *block, int typ
  */
 void *CustomData_bmesh_get_layer_n(const struct CustomData *data, void *block, int n);
 
-bool CustomData_set_layer_name(const struct CustomData *data, int type, int n, const char *name);
+bool CustomData_set_layer_name(struct CustomData *data, int type, int n, const char *name);
 const char *CustomData_get_layer_name(const struct CustomData *data, int type, int n);
 
 /**
@@ -449,6 +450,12 @@ int CustomData_get_stencil_layer(const struct CustomData *data, int type);
  * if no such active layer is defined.
  */
 const char *CustomData_get_active_layer_name(const struct CustomData *data, int type);
+
+/**
+ * Returns name of the default layer of the given type or NULL
+ * if no such active layer is defined.
+ */
+const char *CustomData_get_render_layer_name(const struct CustomData *data, int type);
 
 /**
  * Copies the data from source to the data element at index in the first layer of type
@@ -631,7 +638,6 @@ enum {
   CD_FAKE_CREASE = CD_FAKE | CD_CREASE, /* *sigh*. */
 
   /* Multiple types of mesh elements... */
-  CD_FAKE_BWEIGHT = CD_FAKE | CD_BWEIGHT, /* *sigh*. */
   CD_FAKE_UV = CD_FAKE |
                CD_MLOOPUV, /* UV flag, because we handle both loop's UVs and poly's textures. */
 
@@ -718,7 +724,7 @@ void CustomData_data_transfer(const struct MeshPairRemap *me_remap,
  */
 void CustomData_blend_write_prepare(CustomData &data,
                                     blender::Vector<CustomDataLayer, 16> &layers_to_write,
-                                    const blender::Set<blender::StringRef> &skip_names = {});
+                                    const blender::Set<std::string> &skip_names = {});
 
 /**
  * \param layers_to_write: Layers created by #CustomData_blend_write_prepare.
@@ -733,6 +739,8 @@ void CustomData_blend_write(BlendWriter *writer,
 #endif
 
 void CustomData_blend_read(struct BlendDataReader *reader, struct CustomData *data, int count);
+
+size_t CustomData_get_elem_size(struct CustomDataLayer *layer);
 
 #ifndef NDEBUG
 struct DynStr;

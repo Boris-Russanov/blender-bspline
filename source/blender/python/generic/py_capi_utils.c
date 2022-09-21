@@ -28,8 +28,8 @@
 
 #  include "BLI_string.h"
 
-/* Only for BLI_strncpy_wchar_from_utf8,
- * should replace with py funcs but too late in release now. */
+/* Only for #BLI_strncpy_wchar_from_utf8,
+ * should replace with Python functions but too late in release now. */
 #  include "BLI_string_utf8.h"
 #endif
 
@@ -928,7 +928,7 @@ PyObject *PyC_ExceptionBuffer(void)
   PySys_SetObject("stderr", string_io);
 
   PyErr_Restore(error_type, error_value, error_traceback);
-  /* Printing clears (call #PyErr_Clear as well to ensure it's cleared).  */
+  /* Printing clears (call #PyErr_Clear as well to ensure it's cleared). */
   Py_XINCREF(error_type);
   Py_XINCREF(error_value);
   Py_XINCREF(error_traceback);

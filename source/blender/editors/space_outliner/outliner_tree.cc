@@ -70,7 +70,7 @@
 #  include "BLI_math_base.h" /* M_PI */
 #endif
 
-using namespace blender::ed::outliner;
+namespace blender::ed::outliner {
 
 /* prototypes */
 static int outliner_exclude_filter_get(const SpaceOutliner *space_outliner);
@@ -215,11 +215,6 @@ bool outliner_requires_rebuild_on_select_or_active_change(const SpaceOutliner *s
   /* Need to rebuild tree to re-apply filter if select/active changed while filtering based on
    * select/active. */
   return exclude_flags & (SO_FILTER_OB_STATE_SELECTED | SO_FILTER_OB_STATE_ACTIVE);
-}
-
-bool outliner_requires_rebuild_on_open_change(const SpaceOutliner *space_outliner)
-{
-  return ELEM(space_outliner->outlinevis, SO_DATA_API);
 }
 
 /* special handling of hierarchical non-lib data */
@@ -791,8 +786,6 @@ static void outliner_add_id_contents(SpaceOutliner *space_outliner,
   }
 }
 
-namespace blender::ed::outliner {
-
 TreeElement *outliner_add_element(SpaceOutliner *space_outliner,
                                   ListBase *lb,
                                   void *idv,
@@ -928,8 +921,6 @@ TreeElement *outliner_add_element(SpaceOutliner *space_outliner,
 
   return te;
 }
-
-}  // namespace blender::ed::outliner
 
 /* ======================================================= */
 
@@ -1404,7 +1395,8 @@ static int outliner_exclude_filter_get(const SpaceOutliner *space_outliner)
   return exclude_filter;
 }
 
-static bool outliner_element_visible_get(ViewLayer *view_layer,
+static bool outliner_element_visible_get(const Scene *scene,
+                                         ViewLayer *view_layer,
                                          TreeElement *te,
                                          const int exclude_filter)
 {
@@ -1459,6 +1451,7 @@ static bool outliner_element_visible_get(ViewLayer *view_layer,
 
     if (exclude_filter & SO_FILTER_OB_STATE) {
       if (base == nullptr) {
+        BKE_view_layer_synced_ensure(scene, view_layer);
         base = BKE_view_layer_base_find(view_layer, ob);
 
         if (base == nullptr) {
@@ -1468,7 +1461,7 @@ static bool outliner_element_visible_get(ViewLayer *view_layer,
 
       bool is_visible = true;
       if (exclude_filter & SO_FILTER_OB_STATE_VISIBLE) {
-        if ((base->flag & BASE_VISIBLE_VIEWLAYER) == 0) {
+        if ((base->flag & BASE_ENABLED_AND_VISIBLE_IN_DEFAULT_VIEWPORT) == 0) {
           is_visible = false;
         }
       }
@@ -1484,7 +1477,8 @@ static bool outliner_element_visible_get(ViewLayer *view_layer,
       }
       else {
         BLI_assert(exclude_filter & SO_FILTER_OB_STATE_ACTIVE);
-        if (base != BASACT(view_layer)) {
+        BKE_view_layer_synced_ensure(scene, view_layer);
+        if (base != BKE_view_layer_active_base_get(view_layer)) {
           is_visible = false;
         }
       }
@@ -1566,6 +1560,7 @@ static TreeElement *outliner_extract_children_from_subtree(TreeElement *element,
 }
 
 static int outliner_filter_subtree(SpaceOutliner *space_outliner,
+                                   const Scene *scene,
                                    ViewLayer *view_layer,
                                    ListBase *lb,
                                    const char *search_string,
@@ -1576,18 +1571,18 @@ static int outliner_filter_subtree(SpaceOutliner *space_outliner,
 
   for (te = static_cast<TreeElement *>(lb->first); te; te = te_next) {
     te_next = te->next;
-    if ((outliner_element_visible_get(view_layer, te, exclude_filter) == false)) {
+    if ((outliner_element_visible_get(scene, view_layer, te, exclude_filter) == false)) {
       /* Don't free the tree, but extract the children from the parent and add to this tree. */
       /* This also needs filtering the subtree prior (see T69246). */
       outliner_filter_subtree(
-          space_outliner, view_layer, &te->subtree, search_string, exclude_filter);
+          space_outliner, scene, view_layer, &te->subtree, search_string, exclude_filter);
       te_next = outliner_extract_children_from_subtree(te, lb);
       continue;
     }
     if ((exclude_filter & SO_FILTER_SEARCH) == 0) {
       /* Filter subtree too. */
       outliner_filter_subtree(
-          space_outliner, view_layer, &te->subtree, search_string, exclude_filter);
+          space_outliner, scene, view_layer, &te->subtree, search_string, exclude_filter);
       continue;
     }
 
@@ -1605,7 +1600,8 @@ static int outliner_filter_subtree(SpaceOutliner *space_outliner,
 
       if ((!TSELEM_OPEN(tselem, space_outliner)) ||
           outliner_filter_subtree(
-              space_outliner, view_layer, &te->subtree, search_string, exclude_filter) == 0) {
+              space_outliner, scene, view_layer, &te->subtree, search_string, exclude_filter) ==
+              0) {
         outliner_free_tree_element(te, lb);
       }
     }
@@ -1617,7 +1613,7 @@ static int outliner_filter_subtree(SpaceOutliner *space_outliner,
 
       /* filter subtree too */
       outliner_filter_subtree(
-          space_outliner, view_layer, &te->subtree, search_string, exclude_filter);
+          space_outliner, scene, view_layer, &te->subtree, search_string, exclude_filter);
     }
   }
 
@@ -1625,7 +1621,9 @@ static int outliner_filter_subtree(SpaceOutliner *space_outliner,
   return (BLI_listbase_is_empty(lb) == false);
 }
 
-static void outliner_filter_tree(SpaceOutliner *space_outliner, ViewLayer *view_layer)
+static void outliner_filter_tree(SpaceOutliner *space_outliner,
+                                 const Scene *scene,
+                                 ViewLayer *view_layer)
 {
   char search_buff[sizeof(((struct SpaceOutliner *)nullptr)->search_string) + 2];
   char *search_string;
@@ -1646,7 +1644,7 @@ static void outliner_filter_tree(SpaceOutliner *space_outliner, ViewLayer *view_
   }
 
   outliner_filter_subtree(
-      space_outliner, view_layer, &space_outliner->tree, search_string, exclude_filter);
+      space_outliner, scene, view_layer, &space_outliner->tree, search_string, exclude_filter);
 }
 
 static void outliner_clear_newid_from_main(Main *bmain)
@@ -1723,7 +1721,7 @@ void outliner_build_tree(Main *mainvar,
     outliner_collections_children_sort(&space_outliner->tree);
   }
 
-  outliner_filter_tree(space_outliner, view_layer);
+  outliner_filter_tree(space_outliner, scene, view_layer);
   outliner_restore_scrolling_position(space_outliner, region, &focus);
 
   /* `ID.newid` pointer is abused when building tree, DO NOT call #BKE_main_id_newptr_and_tag_clear
@@ -1732,3 +1730,5 @@ void outliner_build_tree(Main *mainvar,
 }
 
 /** \} */
+
+}  // namespace blender::ed::outliner

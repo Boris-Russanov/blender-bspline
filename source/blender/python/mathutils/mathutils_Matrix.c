@@ -1244,12 +1244,11 @@ static PyObject *Matrix_to_quaternion(MatrixObject *self)
     return NULL;
   }
   if (self->row_num == 3) {
-    mat3_to_quat(quat, (float(*)[3])self->matrix);
+    mat3_to_quat(quat, (const float(*)[3])self->matrix);
   }
   else {
     mat4_to_quat(quat, (const float(*)[4])self->matrix);
   }
-
   return Quaternion_CreatePyObject(quat, NULL);
 }
 
@@ -1888,7 +1887,7 @@ static PyObject *Matrix_decompose(MatrixObject *self)
   }
 
   mat4_to_loc_rot_size(loc, rot, size, (const float(*)[4])self->matrix);
-  mat3_to_quat(quat, rot);
+  mat3_normalized_to_quat_fast(quat, rot);
 
   ret = PyTuple_New(3);
   PyTuple_SET_ITEMS(ret,
@@ -3322,8 +3321,7 @@ PyDoc_STRVAR(
     "   This object gives access to Matrices in Blender, supporting square and rectangular\n"
     "   matrices from 2x2 up to 4x4.\n"
     "\n"
-    "   :param rows: Sequence of rows.\n"
-    "      When omitted, a 4x4 identity matrix is constructed.\n"
+    "   :arg rows: Sequence of rows. When omitted, a 4x4 identity matrix is constructed.\n"
     "   :type rows: 2d number sequence\n");
 PyTypeObject matrix_Type = {
     PyVarObject_HEAD_INIT(NULL, 0) "Matrix", /*tp_name*/

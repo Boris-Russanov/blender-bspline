@@ -19,6 +19,7 @@
 
 #include "DNA_collection_types.h"
 
+#include "obj_export_mtl.hh"
 #include "obj_import_file_reader.hh"
 #include "obj_import_mesh.hh"
 #include "obj_import_nurbs.hh"
@@ -75,6 +76,7 @@ static void geometry_to_blender_objects(Main *bmain,
   /* Sync the collection after all objects are created. */
   BKE_layer_collection_resync_allow();
   BKE_main_collection_sync(bmain);
+  BKE_view_layer_synced_ensure(scene, view_layer);
 
   /* After collection sync, select objects in the view layer and do DEG updates. */
   for (Object *obj : objects) {
@@ -122,7 +124,7 @@ void importer_main(Main *bmain,
   }
 
   if (import_params.clear_selection) {
-    BKE_view_layer_base_deselect_all(view_layer);
+    BKE_view_layer_base_deselect_all(scene, view_layer);
   }
   geometry_to_blender_objects(bmain,
                               scene,

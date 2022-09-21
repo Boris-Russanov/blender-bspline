@@ -79,6 +79,7 @@ set(SRC
   intern/draw_cache_impl_subdivision.cc
   intern/draw_cache_impl_volume.c
   intern/draw_color_management.cc
+  intern/draw_command.cc
   intern/draw_common.c
   intern/draw_curves.cc
   intern/draw_debug.cc
@@ -86,6 +87,7 @@ set(SRC
   intern/draw_hair.cc
   intern/draw_instance_data.c
   intern/draw_manager.c
+  intern/draw_manager.cc
   intern/draw_manager_data.c
   intern/draw_manager_exec.c
   intern/draw_manager_profiling.c
@@ -133,13 +135,14 @@ set(SRC
   engines/eevee/eevee_temporal_sampling.c
   engines/eevee/eevee_volumes.c
   engines/eevee_next/eevee_camera.cc
+  engines/eevee_next/eevee_cryptomatte.cc
   engines/eevee_next/eevee_depth_of_field.cc
   engines/eevee_next/eevee_engine.cc
   engines/eevee_next/eevee_film.cc
+  engines/eevee_next/eevee_hizbuffer.cc
   engines/eevee_next/eevee_instance.cc
   engines/eevee_next/eevee_light.cc
   engines/eevee_next/eevee_material.cc
-  engines/eevee_next/eevee_hizbuffer.cc
   engines/eevee_next/eevee_motion_blur.cc
   engines/eevee_next/eevee_pipeline.cc
   engines/eevee_next/eevee_renderbuffers.cc
@@ -173,33 +176,33 @@ set(SRC
   engines/gpencil/gpencil_shader_fx.c
   engines/select/select_draw_utils.c
   engines/select/select_engine.c
-  engines/overlay/overlay_antialiasing.c
-  engines/overlay/overlay_armature.c
-  engines/overlay/overlay_background.c
-  engines/overlay/overlay_edit_curve.c
+  engines/overlay/overlay_antialiasing.cc
+  engines/overlay/overlay_armature.cc
+  engines/overlay/overlay_background.cc
+  engines/overlay/overlay_edit_curve.cc
   engines/overlay/overlay_edit_curves.cc
-  engines/overlay/overlay_edit_mesh.c
-  engines/overlay/overlay_edit_text.c
-  engines/overlay/overlay_edit_uv.c
-  engines/overlay/overlay_engine.c
-  engines/overlay/overlay_extra.c
-  engines/overlay/overlay_facing.c
-  engines/overlay/overlay_fade.c
-  engines/overlay/overlay_gpencil.c
-  engines/overlay/overlay_grid.c
-  engines/overlay/overlay_image.c
-  engines/overlay/overlay_lattice.c
-  engines/overlay/overlay_metaball.c
-  engines/overlay/overlay_mode_transfer.c
-  engines/overlay/overlay_motion_path.c
-  engines/overlay/overlay_outline.c
-  engines/overlay/overlay_paint.c
-  engines/overlay/overlay_particle.c
-  engines/overlay/overlay_sculpt.c
+  engines/overlay/overlay_edit_mesh.cc
+  engines/overlay/overlay_edit_text.cc
+  engines/overlay/overlay_edit_uv.cc
+  engines/overlay/overlay_engine.cc
+  engines/overlay/overlay_extra.cc
+  engines/overlay/overlay_facing.cc
+  engines/overlay/overlay_fade.cc
+  engines/overlay/overlay_gpencil.cc
+  engines/overlay/overlay_grid.cc
+  engines/overlay/overlay_image.cc
+  engines/overlay/overlay_lattice.cc
+  engines/overlay/overlay_metaball.cc
+  engines/overlay/overlay_mode_transfer.cc
+  engines/overlay/overlay_motion_path.cc
+  engines/overlay/overlay_outline.cc
+  engines/overlay/overlay_paint.cc
+  engines/overlay/overlay_particle.cc
+  engines/overlay/overlay_sculpt.cc
   engines/overlay/overlay_sculpt_curves.cc
-  engines/overlay/overlay_shader.c
-  engines/overlay/overlay_volume.c
-  engines/overlay/overlay_wireframe.c
+  engines/overlay/overlay_shader.cc
+  engines/overlay/overlay_volume.cc
+  engines/overlay/overlay_wireframe.cc
 
   DRW_engine.h
   DRW_select_buffer.h
@@ -211,22 +214,31 @@ set(SRC
   intern/draw_cache_impl.h
   intern/draw_cache_inline.h
   intern/draw_color_management.h
+  intern/draw_command.hh
   intern/draw_common.h
   intern/draw_common_shader_shared.h
   intern/draw_curves_private.h
   intern/draw_debug.h
   intern/draw_debug.hh
   intern/draw_hair_private.h
+  intern/draw_handle.hh
   intern/draw_instance_data.h
   intern/draw_manager.h
+  intern/draw_manager.hh
   intern/draw_manager_profiling.h
   intern/draw_manager_testing.h
   intern/draw_manager_text.h
+  intern/draw_pass.hh
+  intern/draw_resource.cc
+  intern/draw_resource.hh
   intern/draw_shader.h
   intern/draw_shader_shared.h
+  intern/draw_state.h
   intern/draw_subdivision.h
   intern/draw_texture_pool.h
+  intern/draw_view.cc
   intern/draw_view.h
+  intern/draw_view.hh
   intern/draw_view_data.h
   intern/mesh_extractors/extract_mesh.hh
   intern/smaa_textures.h
@@ -237,7 +249,23 @@ set(SRC
   engines/eevee/eevee_lightcache.h
   engines/eevee/eevee_lut.h
   engines/eevee/eevee_private.h
+  engines/eevee_next/eevee_camera.hh
+  engines/eevee_next/eevee_depth_of_field.hh
   engines/eevee_next/eevee_engine.h
+  engines/eevee_next/eevee_film.hh
+  engines/eevee_next/eevee_hizbuffer.hh
+  engines/eevee_next/eevee_instance.hh
+  engines/eevee_next/eevee_light.hh
+  engines/eevee_next/eevee_material.hh
+  engines/eevee_next/eevee_motion_blur.hh
+  engines/eevee_next/eevee_pipeline.hh
+  engines/eevee_next/eevee_renderbuffers.hh
+  engines/eevee_next/eevee_sampling.hh
+  engines/eevee_next/eevee_shader.hh
+  engines/eevee_next/eevee_sync.hh
+  engines/eevee_next/eevee_velocity.hh
+  engines/eevee_next/eevee_view.hh
+  engines/eevee_next/eevee_world.hh
   engines/external/external_engine.h
   engines/image/image_batches.hh
   engines/image/image_buffer_cache.hh
@@ -258,7 +286,7 @@ set(SRC
   engines/select/select_engine.h
   engines/select/select_private.h
   engines/overlay/overlay_engine.h
-  engines/overlay/overlay_private.h
+  engines/overlay/overlay_private.hh
 )
 
 set(LIB
@@ -368,6 +396,7 @@ set(GLSL_SRC
   engines/eevee_next/shaders/eevee_attributes_lib.glsl
   engines/eevee_next/shaders/eevee_camera_lib.glsl
   engines/eevee_next/shaders/eevee_colorspace_lib.glsl
+  engines/eevee_next/shaders/eevee_cryptomatte_lib.glsl
   engines/eevee_next/shaders/eevee_depth_of_field_accumulator_lib.glsl
   engines/eevee_next/shaders/eevee_depth_of_field_bokeh_lut_comp.glsl
   engines/eevee_next/shaders/eevee_depth_of_field_downsample_comp.glsl
@@ -384,6 +413,7 @@ set(GLSL_SRC
   engines/eevee_next/shaders/eevee_depth_of_field_tiles_dilate_comp.glsl
   engines/eevee_next/shaders/eevee_depth_of_field_tiles_flatten_comp.glsl
   engines/eevee_next/shaders/eevee_film_comp.glsl
+  engines/eevee_next/shaders/eevee_film_cryptomatte_post_comp.glsl
   engines/eevee_next/shaders/eevee_film_frag.glsl
   engines/eevee_next/shaders/eevee_film_lib.glsl
   engines/eevee_next/shaders/eevee_geom_curves_vert.glsl
@@ -480,13 +510,18 @@ set(GLSL_SRC
   intern/shaders/common_subdiv_vbo_sculpt_data_comp.glsl
   intern/shaders/common_view_clipping_lib.glsl
   intern/shaders/common_view_lib.glsl
+  intern/shaders/draw_command_generate_comp.glsl
   intern/shaders/draw_debug_draw_display_frag.glsl
   intern/shaders/draw_debug_draw_display_vert.glsl
   intern/shaders/draw_debug_info.hh
   intern/shaders/draw_debug_print_display_frag.glsl
   intern/shaders/draw_debug_print_display_vert.glsl
+  intern/shaders/draw_resource_finalize_comp.glsl
+  intern/shaders/draw_visibility_comp.glsl
 
+  intern/draw_command_shared.hh
   intern/draw_common_shader_shared.h
+  intern/draw_defines.h
   intern/draw_shader_shared.h
 
   engines/gpencil/shaders/gpencil_frag.glsl
@@ -691,6 +726,7 @@ add_dependencies(bf_draw bf_dna)
 if(WITH_GTESTS)
   if(WITH_OPENGL_DRAW_TESTS)
     set(TEST_SRC
+      tests/draw_pass_test.cc
       tests/draw_testing.cc
       tests/shaders_test.cc
 

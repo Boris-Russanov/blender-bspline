@@ -74,8 +74,7 @@
 #include "tree/tree_element_rna.hh"
 #include "tree/tree_iterator.hh"
 
-using namespace blender;
-using namespace blender::ed::outliner;
+namespace blender::ed::outliner {
 
 /* -------------------------------------------------------------------- */
 /** \name Tree Size Functions
@@ -285,8 +284,9 @@ static void outliner_object_set_flag_recursive_fn(bContext *C,
         DEG_id_tag_update(&ob_iter->id, ID_RECALC_COPY_ON_WRITE);
       }
       else {
+        BKE_view_layer_synced_ensure(scene, view_layer);
         Base *base_iter = BKE_view_layer_base_find(view_layer, ob_iter);
-        /* Child can be in a collection excluded from viewlayer. */
+        /* Child can be in a collection excluded from view-layer. */
         if (base_iter == nullptr) {
           continue;
         }
@@ -302,7 +302,7 @@ static void outliner_object_set_flag_recursive_fn(bContext *C,
     DEG_relations_tag_update(bmain);
   }
   else {
-    BKE_layer_collection_sync(scene, view_layer);
+    BKE_view_layer_need_resync_tag(view_layer);
     DEG_id_tag_update(&scene->id, ID_RECALC_BASE_FLAGS);
   }
 }
@@ -349,6 +349,7 @@ static void outliner_base_or_object_pointer_create(
     RNA_id_pointer_create(&ob->id, ptr);
   }
   else {
+    BKE_view_layer_synced_ensure(scene, view_layer);
     Base *base = BKE_view_layer_base_find(view_layer, ob);
     RNA_pointer_create(&scene->id, &RNA_ObjectBase, base, ptr);
   }
@@ -1147,6 +1148,7 @@ static void outliner_draw_restrictbuts(uiBlock *block,
         RNA_id_pointer_create(&ob->id, &ptr);
 
         if (space_outliner->show_restrict_flags & SO_RESTRICT_HIDE) {
+          BKE_view_layer_synced_ensure(scene, view_layer);
           Base *base = (te->directdata) ? (Base *)te->directdata :
                                           BKE_view_layer_base_find(view_layer, ob);
           if (base) {
@@ -1959,7 +1961,7 @@ static void outliner_draw_separator(ARegion *region, const int x)
   GPU_line_width(1.0f);
 
   uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-  immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+  immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
   immUniformThemeColorShadeAlpha(TH_BACK, -15, -200);
 
   immBegin(GPU_PRIM_LINES, 2);
@@ -3214,10 +3216,12 @@ static bool element_should_draw_faded(const TreeViewContext *tvc,
       case ID_OB: {
         const Object *ob = (const Object *)tselem->id;
         /* Lookup in view layer is logically const as it only checks a cache. */
+        BKE_view_layer_synced_ensure(tvc->scene, tvc->view_layer);
         const Base *base = (te->directdata) ? (const Base *)te->directdata :
                                               BKE_view_layer_base_find(
                                                   (ViewLayer *)tvc->view_layer, (Object *)ob);
-        const bool is_visible = (base != nullptr) && (base->flag & BASE_VISIBLE_VIEWLAYER);
+        const bool is_visible = (base != nullptr) &&
+                                (base->flag & BASE_ENABLED_AND_VISIBLE_IN_DEFAULT_VIEWPORT);
         if (!is_visible) {
           return true;
         }
@@ -3281,6 +3285,7 @@ static void outliner_draw_tree_element(bContext *C,
     if (tselem->type == TSE_SOME_ID) {
       if (te->idcode == ID_OB) {
         Object *ob = (Object *)tselem->id;
+        BKE_view_layer_synced_ensure(tvc->scene, tvc->view_layer);
         Base *base = (te->directdata) ? (Base *)te->directdata :
                                         BKE_view_layer_base_find(tvc->view_layer, ob);
         const bool is_selected = (base != nullptr) && ((base->flag & BASE_SELECTED) != 0);
@@ -3336,7 +3341,7 @@ static void outliner_draw_tree_element(bContext *C,
       /* Scene collection in view layer can't expand/collapse. */
     }
     else if (te->subtree.first || ((tselem->type == TSE_SOME_ID) && (te->idcode == ID_SCE)) ||
-             (te->flag & TE_LAZY_CLOSED)) {
+             (te->flag & TE_PRETEND_HAS_CHILDREN)) {
       /* Open/close icon, only when sub-levels, except for scene. */
       int icon_x = startx;
 
@@ -3552,7 +3557,7 @@ static void outliner_draw_hierarchy_lines(SpaceOutliner *space_outliner,
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
   uchar col[4];
 
-  immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
+  immBindBuiltinProgram(GPU_SHADER_3D_LINE_DASHED_UNIFORM_COLOR);
 
   float viewport_size[4];
   GPU_viewport_size_get_f(viewport_size);
@@ -3583,7 +3588,7 @@ static void outliner_draw_struct_marks(ARegion *region,
       if (tselem->type == TSE_RNA_STRUCT) {
         GPUVertFormat *format = immVertexFormat();
         uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
-        immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+        immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
         immThemeColorShadeAlpha(TH_BACK, -15, -200);
         immRecti(pos, 0, *starty + 1, (int)region->v2d.cur.xmax, *starty + UI_UNIT_Y - 1);
         immUnbindProgram();
@@ -3596,7 +3601,7 @@ static void outliner_draw_struct_marks(ARegion *region,
       if (tselem->type == TSE_RNA_STRUCT) {
         GPUVertFormat *format = immVertexFormat();
         uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-        immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+        immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
         immThemeColorShadeAlpha(TH_BACK, -15, -200);
 
         immBegin(GPU_PRIM_LINES, 2);
@@ -3701,7 +3706,7 @@ static void outliner_draw_highlights(ARegion *region,
   GPU_blend(GPU_BLEND_ALPHA);
   GPUVertFormat *format = immVertexFormat();
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
-  immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+  immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
   outliner_draw_highlights(pos,
                            region,
                            space_outliner,
@@ -3802,7 +3807,7 @@ static void outliner_back(ARegion *region)
   GPUVertFormat *format = immVertexFormat();
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
-  immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+  immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
 
   float col_alternating[4];
   UI_GetThemeColor4fv(TH_ROW_ALTERNATE, col_alternating);
@@ -3854,7 +3859,7 @@ static void outliner_update_viewable_area(ARegion *region,
   int sizex = outliner_width(space_outliner, tree_width, right_column_width);
   int sizey = tree_height;
 
-  /* Extend size to allow for horizontal scrollbar and extra offset. */
+  /* Extend size to allow for horizontal scroll-bar and extra offset. */
   sizey += V2D_SCROLL_HEIGHT + OL_Y_OFFSET;
 
   UI_view2d_totRect_set(&region->v2d, sizex, sizey);
@@ -3994,3 +3999,5 @@ void draw_outliner(const bContext *C)
 }
 
 /** \} */
+
+}  // namespace blender::ed::outliner

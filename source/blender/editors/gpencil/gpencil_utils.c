@@ -1038,7 +1038,8 @@ void ED_gpencil_stroke_reproject(Depsgraph *depsgraph,
                                  bGPDframe *gpf,
                                  bGPDstroke *gps,
                                  const eGP_ReprojectModes mode,
-                                 const bool keep_original)
+                                 const bool keep_original,
+                                 const float offset)
 {
   ToolSettings *ts = gsc->scene->toolsettings;
   ARegion *region = gsc->region;
@@ -1156,7 +1157,13 @@ void ED_gpencil_stroke_reproject(Depsgraph *depsgraph,
                                                &depth,
                                                &location[0],
                                                &normal[0])) {
-        copy_v3_v3(&pt->x, location);
+        /* Apply offset over surface. */
+        float normal_vector[3];
+        sub_v3_v3v3(normal_vector, ray_start, location);
+        normalize_v3(normal_vector);
+        mul_v3_fl(normal_vector, offset);
+
+        add_v3_v3v3(&pt->x, location, normal_vector);
       }
       else {
         /* Default to planar */
@@ -1683,7 +1690,7 @@ void ED_gpencil_brush_draw_eraser(Brush *brush, int x, int y)
 
   GPUVertFormat *format = immVertexFormat();
   const uint shdr_pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-  immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+  immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
 
   GPU_line_smooth(true);
   GPU_blend(GPU_BLEND_ALPHA);
@@ -1693,7 +1700,7 @@ void ED_gpencil_brush_draw_eraser(Brush *brush, int x, int y)
 
   immUnbindProgram();
 
-  immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
+  immBindBuiltinProgram(GPU_SHADER_3D_LINE_DASHED_UNIFORM_COLOR);
 
   float viewport_size[4];
   GPU_viewport_size_get_f(viewport_size);
@@ -1865,7 +1872,7 @@ static void gpencil_brush_cursor_draw(bContext *C, int x, int y, void *customdat
   /* draw icon */
   GPUVertFormat *format = immVertexFormat();
   uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-  immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
+  immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
 
   GPU_line_smooth(true);
   GPU_blend(GPU_BLEND_ALPHA);
@@ -3189,7 +3196,7 @@ bGPDstroke *ED_gpencil_stroke_join_and_trim(
 
   /* Join both strokes. */
   int totpoint = gps_final->totpoints;
-  BKE_gpencil_stroke_join(gps_final, gps, false, true, true);
+  BKE_gpencil_stroke_join(gps_final, gps, false, true, true, true);
 
   /* Select the join points and merge if the distance is very small. */
   pt = &gps_final->points[totpoint - 1];

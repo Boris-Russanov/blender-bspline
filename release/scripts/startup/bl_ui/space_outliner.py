@@ -2,6 +2,11 @@
 import bpy
 from bpy.types import Header, Menu, Panel
 
+from bpy.app.translations import (
+    contexts as i18n_contexts,
+    pgettext_iface as iface_,
+)
+
 
 class OUTLINER_HT_header(Header):
     bl_space_type = 'OUTLINER'
@@ -25,8 +30,15 @@ class OUTLINER_HT_header(Header):
 
         layout.separator_spacer()
 
-        row = layout.row(align=True)
-        row.prop(space, "filter_text", icon='VIEWZOOM', text="")
+        filter_text_supported = True
+        # No text filtering for library override hierarchies. The tree is lazy built to avoid
+        # performance issues in complex files.
+        if display_mode == 'LIBRARY_OVERRIDES' and space.lib_override_view_mode == 'HIERARCHIES':
+            filter_text_supported = False
+
+        if filter_text_supported:
+            row = layout.row(align=True)
+            row.prop(space, "filter_text", icon='VIEWZOOM', text="")
 
         layout.separator_spacer()
 
@@ -41,11 +53,8 @@ class OUTLINER_HT_header(Header):
                 text="",
                 icon='FILTER',
             )
-        if display_mode == 'LIBRARY_OVERRIDES' and space.lib_override_view_mode == 'HIERARCHIES':
-            # Don't add ID type filter for library overrides hierarchies mode. Point of it is to see a hierarchy that is
-            # usually constructed out of different ID types.
-            pass
-        elif display_mode in {'LIBRARIES', 'LIBRARY_OVERRIDES', 'ORPHAN_DATA'}:
+
+        if display_mode in {'LIBRARIES', 'ORPHAN_DATA'}:
             row.prop(space, "use_filter_id_type", text="", icon='FILTER')
             sub = row.row(align=True)
             sub.active = space.use_filter_id_type
@@ -211,7 +220,8 @@ class OUTLINER_MT_collection(Menu):
 
         space = context.space_data
 
-        layout.operator("outliner.collection_new", text="New").nested = True
+        layout.operator("outliner.collection_new", text="New",
+                        text_ctxt=i18n_contexts.id_collection).nested = True
         layout.operator("outliner.collection_duplicate", text="Duplicate Collection")
         layout.operator("outliner.collection_duplicate_linked", text="Duplicate Linked")
         layout.operator("outliner.id_copy", text="Copy", icon='COPYDOWN')
@@ -313,8 +323,21 @@ class OUTLINER_MT_object(Menu):
         OUTLINER_MT_context_menu.draw_common_operators(layout)
 
 
+def has_selected_ids_in_context(context):
+    if hasattr(context, "id"):
+        return True
+    if len(context.selected_ids) > 0:
+        return True
+
+    return False
+
+
 class OUTLINER_MT_asset(Menu):
     bl_label = "Assets"
+
+    @classmethod
+    def poll(cls, context):
+        return has_selected_ids_in_context(context)
 
     def draw(self, _context):
         layout = self.layout
@@ -326,6 +349,10 @@ class OUTLINER_MT_asset(Menu):
 
 class OUTLINER_MT_liboverride(Menu):
     bl_label = "Library Override"
+
+    @classmethod
+    def poll(cls, context):
+        return has_selected_ids_in_context(context)
 
     def draw(self, _context):
         layout = self.layout
@@ -388,14 +415,19 @@ class OUTLINER_PT_filter(Panel):
             row.prop(space, "show_mode_column", text="Show Mode Column")
             layout.separator()
 
-        col = layout.column(align=True)
-        col.label(text="Search")
-        col.prop(space, "use_filter_complete", text="Exact Match")
-        col.prop(space, "use_filter_case_sensitive", text="Case Sensitive")
+        filter_text_supported = True
+        # Same exception for library overrides as in OUTLINER_HT_header.
+        if display_mode == 'LIBRARY_OVERRIDES' and space.lib_override_view_mode == 'HIERARCHIES':
+            filter_text_supported = False
+
+        if filter_text_supported:
+            col = layout.column(align=True)
+            col.label(text="Search")
+            col.prop(space, "use_filter_complete", text="Exact Match")
+            col.prop(space, "use_filter_case_sensitive", text="Case Sensitive")
 
         if display_mode == 'LIBRARY_OVERRIDES' and space.lib_override_view_mode == 'PROPERTIES' and bpy.data.libraries:
-            col.separator()
-            row = col.row()
+            row = layout.row()
             row.label(icon='LIBRARY_DATA_OVERRIDE')
             row.prop(space, "use_filter_lib_override_system", text="System Overrides")
 

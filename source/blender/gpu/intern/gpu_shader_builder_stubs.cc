@@ -136,9 +136,7 @@ eAttrDomain BKE_id_attribute_domain(const struct ID *UNUSED(id),
 /* -------------------------------------------------------------------- */
 /** \name Stubs of BKE_paint.h
  * \{ */
-bool paint_is_face_hidden(const struct MLoopTri *UNUSED(lt),
-                          const bool *UNUSED(hide_vert),
-                          const struct MLoop *UNUSED(mloop))
+bool paint_is_face_hidden(const struct MLoopTri *UNUSED(lt), const bool *UNUSED(hide_poly))
 {
   BLI_assert_unreachable();
   return false;
@@ -228,6 +226,11 @@ bool CustomData_has_layer(const struct CustomData *UNUSED(data), int UNUSED(type
 void *CustomData_get_layer_named(const struct CustomData *UNUSED(data),
                                  int UNUSED(type),
                                  const char *UNUSED(name))
+{
+  return nullptr;
+}
+
+void *CustomData_get_layer(const struct CustomData *UNUSED(data), int UNUSED(type))
 {
   return nullptr;
 }

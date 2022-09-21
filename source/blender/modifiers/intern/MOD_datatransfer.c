@@ -22,6 +22,7 @@
 #include "BKE_data_transfer.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_query.h"
+#include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
 #include "BKE_mesh_remap.h"
 #include "BKE_modifier.h"
@@ -72,9 +73,7 @@ static void initData(ModifierData *md)
   dtmd->flags = MOD_DATATRANSFER_OBSRC_TRANSFORM;
 }
 
-static void requiredDataMask(Object *UNUSED(ob),
-                             ModifierData *md,
-                             CustomData_MeshMasks *r_cddata_masks)
+static void requiredDataMask(ModifierData *md, CustomData_MeshMasks *r_cddata_masks)
 {
   DataTransferModifierData *dtmd = (DataTransferModifierData *)md;
 
@@ -178,7 +177,12 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
     BLI_SPACE_TRANSFORM_SETUP(space_transform, ctx->object, ob_source);
   }
 
-  if (((result == me) || (me->mvert == result->mvert) || (me->medge == result->medge)) &&
+  const MVert *me_verts = BKE_mesh_verts(me);
+  const MEdge *me_edges = BKE_mesh_edges(me);
+  const MVert *result_verts = BKE_mesh_verts(result);
+  const MEdge *result_edges = BKE_mesh_edges(result);
+
+  if (((result == me) || (me_verts == result_verts) || (me_edges == result_edges)) &&
       (dtmd->data_types & DT_TYPES_AFFECT_MESH)) {
     /* We need to duplicate data here, otherwise setting custom normals, edges' sharpness, etc.,
      * could modify org mesh, see T43671. */

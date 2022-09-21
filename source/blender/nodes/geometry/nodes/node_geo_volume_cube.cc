@@ -113,9 +113,9 @@ class Grid3DFieldContext : public FieldContext {
   }
 };
 
-#ifdef WITH_OPENVDB
 static void node_geo_exec(GeoNodeExecParams params)
 {
+#ifdef WITH_OPENVDB
   const float3 bounds_min = params.extract_input<float3>("Min");
   const float3 bounds_max = params.extract_input<float3>("Max");
 
@@ -133,6 +133,14 @@ static void node_geo_exec(GeoNodeExecParams params)
       bounds_min.z == bounds_max.z) {
     params.error_message_add(NodeWarningType::Error,
                              TIP_("Bounding box volume must be greater than 0"));
+    params.set_default_remaining_outputs();
+    return;
+  }
+
+  const double3 scale_fac = double3(bounds_max - bounds_min) / double3(resolution - 1);
+  if (!BKE_volume_grid_determinant_valid(scale_fac.x * scale_fac.y * scale_fac.z)) {
+    params.error_message_add(NodeWarningType::Warning,
+                             TIP_("Volume scale is lower than permitted by OpenVDB"));
     params.set_default_remaining_outputs();
     return;
   }
@@ -157,8 +165,7 @@ static void node_geo_exec(GeoNodeExecParams params)
   openvdb::tools::copyFromDense(dense_grid, *grid, 0.0f);
 
   grid->transform().preTranslate(openvdb::math::Vec3<float>(-0.5f));
-  const float3 scale_fac = (bounds_max - bounds_min) / float3(resolution - 1);
-  grid->transform().postScale(openvdb::math::Vec3<float>(scale_fac.x, scale_fac.y, scale_fac.z));
+  grid->transform().postScale(openvdb::math::Vec3<double>(scale_fac.x, scale_fac.y, scale_fac.z));
   grid->transform().postTranslate(
       openvdb::math::Vec3<float>(bounds_min.x, bounds_min.y, bounds_min.z));
 
@@ -170,16 +177,12 @@ static void node_geo_exec(GeoNodeExecParams params)
   GeometrySet r_geometry_set;
   r_geometry_set.replace_volume(volume);
   params.set_output("Volume", r_geometry_set);
-}
-
 #else
-static void node_geo_exec(GeoNodeExecParams params)
-{
+  params.set_default_remaining_outputs();
   params.error_message_add(NodeWarningType::Error,
                            TIP_("Disabled, Blender was compiled without OpenVDB"));
-  params.set_default_remaining_outputs();
+#endif
 }
-#endif /* WITH_OPENVDB */
 
 }  // namespace blender::nodes::node_geo_volume_cube_cc
 

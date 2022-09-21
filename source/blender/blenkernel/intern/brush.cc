@@ -186,6 +186,7 @@ static void brush_foreach_id(ID *id, LibraryForeachIDData *data)
   BKE_LIB_FOREACHID_PROCESS_IDSUPER(data, brush->paint_curve, IDWALK_CB_USER);
   if (brush->gpencil_settings) {
     BKE_LIB_FOREACHID_PROCESS_IDSUPER(data, brush->gpencil_settings->material, IDWALK_CB_USER);
+    BKE_LIB_FOREACHID_PROCESS_IDSUPER(data, brush->gpencil_settings->material_alt, IDWALK_CB_USER);
   }
   BKE_LIB_FOREACHID_PROCESS_FUNCTION_CALL(data, BKE_texture_mtex_foreach_id(data, &brush->mtex));
   BKE_LIB_FOREACHID_PROCESS_FUNCTION_CALL(data,
@@ -346,6 +347,7 @@ static void brush_blend_read_lib(BlendLibReader *reader, ID *id)
     else {
       brush->gpencil_settings->material = nullptr;
     }
+    BLO_read_id_address(reader, brush->id.lib, &brush->gpencil_settings->material_alt);
   }
 }
 
@@ -358,6 +360,7 @@ static void brush_blend_read_expand(BlendExpander *expander, ID *id)
   BLO_expand(expander, brush->paint_curve);
   if (brush->gpencil_settings != nullptr) {
     BLO_expand(expander, brush->gpencil_settings->material);
+    BLO_expand(expander, brush->gpencil_settings->material_alt);
   }
 }
 
@@ -410,7 +413,7 @@ IDTypeInfo IDType_ID_BR = {
     /* foreach_id */ brush_foreach_id,
     /* foreach_cache */ nullptr,
     /* foreach_path */ brush_foreach_path,
-    /* owner_get */ nullptr,
+    /* owner_pointer_get */ nullptr,
 
     /* blend_write */ brush_blend_write,
     /* blend_read_data */ brush_blend_read_data,
@@ -704,6 +707,7 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
   /* Set vertex mix factor. */
   brush->gpencil_settings->vertex_mode = GPPAINT_MODE_BOTH;
   brush->gpencil_settings->vertex_factor = 1.0f;
+  brush->gpencil_settings->material_alt = nullptr;
 
   switch (type) {
     case GP_BRUSH_PRESET_AIRBRUSH: {
@@ -978,7 +982,6 @@ void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
     case GP_BRUSH_PRESET_FILL_AREA: {
       brush->size = 5.0f;
 
-      brush->gpencil_settings->fill_leak = 3;
       brush->gpencil_settings->fill_threshold = 0.1f;
       brush->gpencil_settings->fill_simplylvl = 1;
       brush->gpencil_settings->fill_factor = 1.0f;

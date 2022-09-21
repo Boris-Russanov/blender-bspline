@@ -25,7 +25,11 @@ extern "C" {
  */
 typedef struct MVert {
   float co[3];
-  char flag, bweight;
+  char flag;
+  /**
+   * Deprecated bevel weight storage, now located in #CD_BWEIGHT, except for file read and write.
+   */
+  char bweight_legacy;
   char _pad[2];
 } MVert;
 
@@ -47,7 +51,11 @@ enum {
 typedef struct MEdge {
   /** Un-ordered vertex indices (cannot match). */
   unsigned int v1, v2;
-  char crease, bweight;
+  char crease;
+  /**
+   * Deprecated bevel weight storage, now located in #CD_BWEIGHT, except for file read and write.
+   */
+  char bweight_legacy;
   short flag;
 } MEdge;
 
@@ -74,7 +82,8 @@ typedef struct MPoly {
   int loopstart;
   /** Keep signed since we need to subtract when getting the previous loop. */
   int totloop;
-  short mat_nr;
+  /** Deprecated material index. Now stored in the "material_index" attribute, but kept for IO. */
+  short mat_nr_legacy;
   char flag, _pad;
 } MPoly;
 
@@ -156,8 +165,8 @@ enum {
  *
  * Usage examples:
  * \code{.c}
- * // access original material.
- * short mat_nr = mpoly[lt->poly].mat_nr;
+ * // access polygon attribute value.
+ * T value = polygon_attribute[lt->poly];
  *
  * // access vertex locations.
  * float *vtri_co[3] = {

@@ -116,7 +116,7 @@ ccl_device_inline int bsdf_sample(KernelGlobals kg,
     case CLOSURE_BSDF_DIFFUSE_ID:
       label = bsdf_diffuse_sample(sc, Ng, sd->I, randu, randv, eval, omega_in, pdf);
       break;
-#ifdef __SVM__
+#if defined(__SVM__) || defined(__OSL__)
     case CLOSURE_BSDF_OREN_NAYAR_ID:
       label = bsdf_oren_nayar_sample(sc, Ng, sd->I, randu, randv, eval, omega_in, pdf);
       break;
@@ -182,14 +182,12 @@ ccl_device_inline int bsdf_sample(KernelGlobals kg,
     case CLOSURE_BSDF_HAIR_PRINCIPLED_ID:
       label = bsdf_principled_hair_sample(kg, sc, sd, randu, randv, eval, omega_in, pdf);
       break;
-#  ifdef __PRINCIPLED__
     case CLOSURE_BSDF_PRINCIPLED_DIFFUSE_ID:
       label = bsdf_principled_diffuse_sample(sc, Ng, sd->I, randu, randv, eval, omega_in, pdf);
       break;
     case CLOSURE_BSDF_PRINCIPLED_SHEEN_ID:
       label = bsdf_principled_sheen_sample(sc, Ng, sd->I, randu, randv, eval, omega_in, pdf);
       break;
-#  endif /* __PRINCIPLED__ */
 #endif
     default:
       label = LABEL_NONE;
@@ -248,7 +246,7 @@ ccl_device_inline
       case CLOSURE_BSDF_DIFFUSE_ID:
         eval = bsdf_diffuse_eval_reflect(sc, sd->I, omega_in, pdf);
         break;
-#ifdef __SVM__
+#if defined(__SVM__) || defined(__OSL__)
       case CLOSURE_BSDF_OREN_NAYAR_ID:
         eval = bsdf_oren_nayar_eval_reflect(sc, sd->I, omega_in, pdf);
         break;
@@ -312,14 +310,12 @@ ccl_device_inline
       case CLOSURE_BSDF_HAIR_TRANSMISSION_ID:
         eval = bsdf_hair_transmission_eval_reflect(sc, sd->I, omega_in, pdf);
         break;
-#  ifdef __PRINCIPLED__
       case CLOSURE_BSDF_PRINCIPLED_DIFFUSE_ID:
         eval = bsdf_principled_diffuse_eval_reflect(sc, sd->I, omega_in, pdf);
         break;
       case CLOSURE_BSDF_PRINCIPLED_SHEEN_ID:
         eval = bsdf_principled_sheen_eval_reflect(sc, sd->I, omega_in, pdf);
         break;
-#  endif /* __PRINCIPLED__ */
 #endif
       default:
         break;
@@ -341,7 +337,7 @@ ccl_device_inline
       case CLOSURE_BSDF_DIFFUSE_ID:
         eval = bsdf_diffuse_eval_transmit(sc, sd->I, omega_in, pdf);
         break;
-#ifdef __SVM__
+#if defined(__SVM__) || defined(__OSL__)
       case CLOSURE_BSDF_OREN_NAYAR_ID:
         eval = bsdf_oren_nayar_eval_transmit(sc, sd->I, omega_in, pdf);
         break;
@@ -397,14 +393,12 @@ ccl_device_inline
       case CLOSURE_BSDF_HAIR_TRANSMISSION_ID:
         eval = bsdf_hair_transmission_eval_transmit(sc, sd->I, omega_in, pdf);
         break;
-#  ifdef __PRINCIPLED__
       case CLOSURE_BSDF_PRINCIPLED_DIFFUSE_ID:
         eval = bsdf_principled_diffuse_eval_transmit(sc, sd->I, omega_in, pdf);
         break;
       case CLOSURE_BSDF_PRINCIPLED_SHEEN_ID:
         eval = bsdf_principled_sheen_eval_transmit(sc, sd->I, omega_in, pdf);
         break;
-#  endif /* __PRINCIPLED__ */
 #endif
       default:
         break;
@@ -425,7 +419,7 @@ ccl_device_inline
 ccl_device void bsdf_blur(KernelGlobals kg, ccl_private ShaderClosure *sc, float roughness)
 {
   /* TODO: do we want to blur volume closures? */
-#ifdef __SVM__
+#if defined(__SVM__) || defined(__OSL__)
   switch (sc->type) {
     case CLOSURE_BSDF_MICROFACET_MULTI_GGX_ID:
     case CLOSURE_BSDF_MICROFACET_MULTI_GGX_FRESNEL_ID:

@@ -210,13 +210,9 @@ static void gpu_pbvh_batch_init(GPU_PBVH_Buffers *buffers, GPUPrimType prim)
 /** \name Mesh PBVH
  * \{ */
 
-static bool gpu_pbvh_is_looptri_visible(const MLoopTri *lt,
-                                        const bool *hide_vert,
-                                        const MLoop *mloop,
-                                        const int *sculpt_face_sets)
+static bool gpu_pbvh_is_looptri_visible(const MLoopTri *lt, const bool *hide_poly)
 {
-  return (!paint_is_face_hidden(lt, hide_vert, mloop) && sculpt_face_sets &&
-          sculpt_face_sets[lt->poly] > SCULPT_FACE_SET_NONE);
+  return !paint_is_face_hidden(lt, hide_poly);
 }
 
 void GPU_pbvh_mesh_buffers_update(PBVHGPUFormat *vbo_id,
@@ -233,8 +229,10 @@ void GPU_pbvh_mesh_buffers_update(PBVHGPUFormat *vbo_id,
   GPUAttrRef vcol_refs[MAX_GPU_ATTR];
   GPUAttrRef cd_uvs[MAX_GPU_ATTR];
 
-  const bool *hide_vert = (bool *)CustomData_get_layer_named(
-      &mesh->vdata, CD_PROP_BOOL, ".hide_vert");
+  const bool *hide_poly = (const bool *)CustomData_get_layer_named(
+      &mesh->pdata, CD_PROP_BOOL, ".hide_poly");
+  const int *material_indices = (const int *)CustomData_get_layer_named(
+      &mesh->pdata, CD_PROP_INT32, "material_index");
 
   const CustomDataLayer *actcol = BKE_id_attributes_active_color_get(&mesh->id);
   eAttrDomain actcol_domain = actcol ? BKE_id_attribute_domain(&mesh->id, actcol) :
@@ -313,7 +311,7 @@ void GPU_pbvh_mesh_buffers_update(PBVHGPUFormat *vbo_id,
           for (uint i = 0; i < buffers->face_indices_len; i++) {
             const MLoopTri *lt = &buffers->looptri[buffers->face_indices[i]];
 
-            if (!gpu_pbvh_is_looptri_visible(lt, hide_vert, buffers->mloop, sculpt_face_sets)) {
+            if (!gpu_pbvh_is_looptri_visible(lt, hide_poly)) {
               continue;
             }
 
@@ -329,20 +327,20 @@ void GPU_pbvh_mesh_buffers_update(PBVHGPUFormat *vbo_id,
       for (int col_i = 0; col_i < totcol; col_i++) {
         GPU_vertbuf_attr_get_raw_data(buffers->vert_buf, vbo_id->col[col_i], &col_step);
 
-        MPropCol *pcol = NULL;
-        MLoopCol *mcol = NULL;
+        const MPropCol *pcol = NULL;
+        const MLoopCol *mcol = NULL;
 
         GPUAttrRef *ref = vcol_refs + col_i;
         const CustomData *cdata = ref->domain == ATTR_DOMAIN_POINT ? &mesh->vdata : &mesh->ldata;
-        CustomDataLayer *layer = cdata->layers + ref->layer_idx;
+        const CustomDataLayer *layer = cdata->layers + ref->layer_idx;
 
         bool color_loops = ref->domain == ATTR_DOMAIN_CORNER;
 
         if (layer->type == CD_PROP_COLOR) {
-          pcol = (MPropCol *)layer->data;
+          pcol = (const MPropCol *)layer->data;
         }
         else {
-          mcol = (MLoopCol *)layer->data;
+          mcol = (const MLoopCol *)layer->data;
         }
 
         for (uint i = 0; i < buffers->face_indices_len; i++) {
@@ -353,7 +351,7 @@ void GPU_pbvh_mesh_buffers_update(PBVHGPUFormat *vbo_id,
               buffers->mloop[lt->tri[2]].v,
           };
 
-          if (!gpu_pbvh_is_looptri_visible(lt, hide_vert, buffers->mloop, sculpt_face_sets)) {
+          if (!gpu_pbvh_is_looptri_visible(lt, hide_poly)) {
             continue;
           }
 
@@ -364,7 +362,7 @@ void GPU_pbvh_mesh_buffers_update(PBVHGPUFormat *vbo_id,
             ushort scol[4] = {USHRT_MAX, USHRT_MAX, USHRT_MAX, USHRT_MAX};
 
             if (pcol) {
-              MPropCol *pcol2 = pcol + (color_loops ? loop_index : vtri[j]);
+              const MPropCol *pcol2 = pcol + (color_loops ? loop_index : vtri[j]);
 
               scol[0] = unit_float_to_ushort_clamp(pcol2->color[0]);
               scol[1] = unit_float_to_ushort_clamp(pcol2->color[1]);
@@ -393,7 +391,7 @@ void GPU_pbvh_mesh_buffers_update(PBVHGPUFormat *vbo_id,
             buffers->mloop[lt->tri[2]].v,
         };
 
-        if (!gpu_pbvh_is_looptri_visible(lt, hide_vert, buffers->mloop, sculpt_face_sets)) {
+        if (!gpu_pbvh_is_looptri_visible(lt, hide_poly)) {
           continue;
         }
 
@@ -408,7 +406,7 @@ void GPU_pbvh_mesh_buffers_update(PBVHGPUFormat *vbo_id,
 
         uchar face_set_color[4] = {UCHAR_MAX, UCHAR_MAX, UCHAR_MAX, UCHAR_MAX};
         if (show_face_sets) {
-          const int fset = abs(sculpt_face_sets[lt->poly]);
+          const int fset = sculpt_face_sets[lt->poly];
           /* Skip for the default color Face Set to render it white. */
           if (fset != face_sets_color_default) {
             BKE_paint_face_set_overlay_color_get(fset, face_sets_color_seed, face_set_color);
@@ -449,8 +447,7 @@ void GPU_pbvh_mesh_buffers_update(PBVHGPUFormat *vbo_id,
 
   /* Get material index from the first face of this buffer. */
   const MLoopTri *lt = &buffers->looptri[buffers->face_indices[0]];
-  const MPoly *mp = &buffers->mpoly[lt->poly];
-  buffers->material_index = mp->mat_nr;
+  buffers->material_index = material_indices ? material_indices[lt->poly] : 0;
 
   buffers->show_overlay = !empty_mask || !default_face_set;
   buffers->mvert = mvert;
@@ -458,7 +455,6 @@ void GPU_pbvh_mesh_buffers_update(PBVHGPUFormat *vbo_id,
 
 GPU_PBVH_Buffers *GPU_pbvh_mesh_buffers_build(const Mesh *mesh,
                                               const MLoopTri *looptri,
-                                              const int *sculpt_face_sets,
                                               const int *face_indices,
                                               const int face_indices_len)
 {
@@ -466,23 +462,23 @@ GPU_PBVH_Buffers *GPU_pbvh_mesh_buffers_build(const Mesh *mesh,
   int i, tottri;
   int tot_real_edges = 0;
 
-  const MPoly *mpoly = mesh->mpoly;
-  const MLoop *mloop = mesh->mloop;
+  const MPoly *polys = BKE_mesh_polys(mesh);
+  const MLoop *loops = BKE_mesh_loops(mesh);
 
   buffers = MEM_callocN(sizeof(GPU_PBVH_Buffers), "GPU_Buffers");
 
-  const bool *hide_vert = (bool *)CustomData_get_layer_named(
-      &mesh->vdata, CD_PROP_BOOL, ".hide_vert");
+  const bool *hide_poly = (bool *)CustomData_get_layer_named(
+      &mesh->pdata, CD_PROP_BOOL, ".hide_poly");
 
   /* smooth or flat for all */
-  buffers->smooth = mpoly[looptri[face_indices[0]].poly].flag & ME_SMOOTH;
+  buffers->smooth = polys[looptri[face_indices[0]].poly].flag & ME_SMOOTH;
 
   buffers->show_overlay = false;
 
   /* Count the number of visible triangles */
   for (i = 0, tottri = 0; i < face_indices_len; i++) {
     const MLoopTri *lt = &looptri[face_indices[i]];
-    if (gpu_pbvh_is_looptri_visible(lt, hide_vert, mloop, sculpt_face_sets)) {
+    if (gpu_pbvh_is_looptri_visible(lt, hide_poly)) {
       int r_edges[3];
       BKE_mesh_looptri_get_real_edges(mesh, lt, r_edges);
       for (int j = 0; j < 3; j++) {
@@ -497,8 +493,8 @@ GPU_PBVH_Buffers *GPU_pbvh_mesh_buffers_build(const Mesh *mesh,
   if (tottri == 0) {
     buffers->tot_tri = 0;
 
-    buffers->mpoly = mpoly;
-    buffers->mloop = mloop;
+    buffers->mpoly = polys;
+    buffers->mloop = loops;
     buffers->looptri = looptri;
     buffers->face_indices = face_indices;
     buffers->face_indices_len = 0;
@@ -515,7 +511,7 @@ GPU_PBVH_Buffers *GPU_pbvh_mesh_buffers_build(const Mesh *mesh,
     const MLoopTri *lt = &looptri[face_indices[i]];
 
     /* Skip hidden faces */
-    if (!gpu_pbvh_is_looptri_visible(lt, hide_vert, mloop, sculpt_face_sets)) {
+    if (!gpu_pbvh_is_looptri_visible(lt, hide_poly)) {
       continue;
     }
 
@@ -537,8 +533,8 @@ GPU_PBVH_Buffers *GPU_pbvh_mesh_buffers_build(const Mesh *mesh,
 
   buffers->tot_tri = tottri;
 
-  buffers->mpoly = mpoly;
-  buffers->mloop = mloop;
+  buffers->mpoly = polys;
+  buffers->mloop = loops;
   buffers->looptri = looptri;
 
   buffers->face_indices = face_indices;
@@ -770,7 +766,7 @@ void GPU_pbvh_grid_buffers_update(PBVHGPUFormat *vbo_id,
       if (show_face_sets && subdiv_ccg && sculpt_face_sets) {
         const int face_index = BKE_subdiv_ccg_grid_to_face_index(subdiv_ccg, grid_index);
 
-        const int fset = abs(sculpt_face_sets[face_index]);
+        const int fset = sculpt_face_sets[face_index];
         /* Skip for the default color Face Set to render it white. */
         if (fset != face_sets_color_default) {
           BKE_paint_face_set_overlay_color_get(fset, face_sets_color_seed, face_set_color);
@@ -1232,7 +1228,7 @@ static int gpu_pbvh_make_attr_offs(eAttrDomainMask domain_mask,
       continue;
     }
 
-    CustomDataLayer *cl = cdata->layers;
+    const CustomDataLayer *cl = cdata->layers;
 
     for (int i = 0; count < MAX_GPU_ATTR && i < cdata->totlayer; i++, cl++) {
       if ((CD_TYPE_AS_MASK(cl->type) & type_mask) && !(cl->flag & CD_FLAG_TEMPORARY)) {
@@ -1319,12 +1315,12 @@ bool GPU_pbvh_attribute_names_update(PBVHType pbvh_type,
 
       BKE_id_attribute_copy_domains_temp(ID_ME, vdata, NULL, ldata, NULL, NULL, &me_query.id);
 
-      CustomDataLayer *active_color_layer = BKE_id_attributes_active_color_get(&me_query.id);
-      CustomDataLayer *render_color_layer = BKE_id_attributes_render_color_get(&me_query.id);
+      const CustomDataLayer *active_color_layer = BKE_id_attributes_active_color_get(&me_query.id);
+      const CustomDataLayer *render_color_layer = BKE_id_attributes_render_color_get(&me_query.id);
       eAttrDomain active_color_domain = active_color_layer ?
                                             BKE_id_attribute_domain(&me_query.id,
                                                                     active_color_layer) :
-                                            ATTR_DOMAIN_NUM;
+                                            ATTR_DOMAIN_POINT;
 
       GPUAttrRef vcol_layers[MAX_GPU_ATTR];
       int totlayer = gpu_pbvh_make_attr_offs(ATTR_DOMAIN_MASK_COLOR,
@@ -1374,7 +1370,7 @@ bool GPU_pbvh_attribute_names_update(PBVHType pbvh_type,
     vbo_id->totuv = 0;
     if (pbvh_type == PBVH_FACES && ldata && CustomData_has_layer(ldata, CD_MLOOPUV)) {
       GPUAttrRef uv_layers[MAX_GPU_ATTR];
-      CustomDataLayer *active = NULL, *render = NULL;
+      const CustomDataLayer *active = NULL, *render = NULL;
 
       active = get_active_layer(ldata, CD_MLOOPUV);
       render = get_render_layer(ldata, CD_MLOOPUV);
@@ -1400,7 +1396,7 @@ bool GPU_pbvh_attribute_names_update(PBVHType pbvh_type,
         vbo_id->uv[i] = GPU_vertformat_attr_add(
             &vbo_id->format, "uvs", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
 
-        CustomDataLayer *cl = ldata->layers + ref->layer_idx;
+        const CustomDataLayer *cl = ldata->layers + ref->layer_idx;
         bool is_active = ref->layer_idx == CustomData_get_active_layer_index(ldata, CD_MLOOPUV);
 
         DRW_cdlayer_attr_aliases_add(&vbo_id->format, "u", ldata, cl, cl == render, is_active);

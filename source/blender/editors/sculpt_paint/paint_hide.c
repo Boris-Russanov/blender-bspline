@@ -81,7 +81,7 @@ static void partialvis_update_mesh(Object *ob,
   bool *hide_vert = CustomData_get_layer_named(&me->vdata, CD_PROP_BOOL, ".hide_vert");
   if (hide_vert == NULL) {
     hide_vert = CustomData_add_layer_named(
-        &me->vdata, CD_PROP_BOOL, CD_CALLOC, NULL, me->totvert, ".hide_vert");
+        &me->vdata, CD_PROP_BOOL, CD_SET_DEFAULT, NULL, me->totvert, ".hide_vert");
   }
 
   SCULPT_undo_push_node(ob, node, SCULPT_UNDO_HIDDEN);
@@ -383,9 +383,8 @@ static int hide_show_exec(bContext *C, wmOperator *op)
    * sculpt but it looks wrong when entering editmode otherwise). */
   if (pbvh_type == PBVH_FACES) {
     BKE_mesh_flush_hidden_from_verts(me);
+    BKE_pbvh_update_hide_attributes_from_mesh(pbvh);
   }
-
-  SCULPT_visibility_sync_all_vertex_to_face_sets(ob->sculpt);
 
   DEG_id_tag_update(&ob->id, ID_RECALC_SHADING);
   ED_region_tag_redraw(region);
